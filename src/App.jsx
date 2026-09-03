@@ -1,0 +1,674 @@
+import React, { useState, useEffect } from 'react';
+
+// ─── SMALL COMPONENTS ──────────────────────────────────────────────────────────
+
+function SectionHeader({ num, label }) {
+  return (
+    <div className="section-header">
+      <span className="section-number">
+        {num}
+      </span>
+      <span className="section-title">{label}</span>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="field-group">
+      <div className="field-label">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+const inp = "input-control";
+const inpRed = "input-control input-control-highlight";
+const inpAmber = "input-control input-control-highlight";
+
+// ─── TOGGLE BUTTON PAIR ────────────────────────────────────────────────────────
+function Toggle({ value, onChange, options }) {
+  return (
+    <div className="flex" style={{ border: '1px solid #d1d5db' }}>
+      {options.map(({ val, label }) => (
+        <button key={val} onClick={() => onChange(val)}
+          className="flex-1 py-1.5 text-[10px] font-mono font-bold transition-colors"
+          style={{
+            background: value === val ? '#111111' : '#ffffff',
+            color:      value === val ? '#ffffff' : '#6b7280',
+          }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── VALIDATION ────────────────────────────────────────────────────────────────
+function validate(f) {
+  const warns = [];
+  if (f.altCil > f.alt)       warns.push(`Alt. hasta hombro (${f.altCil}) > alt. total (${f.alt})`);
+  if (f.tapa >= f.dia)        warns.push(`Ø tapa (${f.tapa}) ≥ Ø botella (${f.dia})`);
+  if (f.solape < 20)          warns.push('Solape < 20 mm — riesgo de apertura');
+  if (f.ladoA < 1 || f.ladoB < 1) warns.push('Disposición mínima: 1×1');
+  if (f.micron < 30)          warns.push('Espesor < 30 µm — fuera de rango habitual');
+  return warns;
+}
+
+// ─── MAIN APP ──────────────────────────────────────────────────────────────────
+export default function App() {
+
+  // ── INPUTS ── (default: BNQ 500 ×12 / 4×3, termo cristal)
+  const [ladoA,    setLadoA]    = useState(3);      // lado CORTO (top del perfil)
+  const [ladoB,    setLadoB]    = useState(4);      // lado LARGO (vertical, ancho bobina)
+  const [dia,      setDia]      = useState(70.5);   // Ø botella cuerpo (mm)
+  const [alt,      setAlt]      = useState(210);    // altura total botella (mm)
+  const [altCil,   setAltCil]   = useState(127.19); // altura hasta el hombro (mm)
+  const [tapa,     setTapa]     = useState(26.2);   // Ø tapa superior (mm)
+  const [micron,   setMicron]   = useState(50);     // espesor film (µm)
+  const [canales,  setCanales]  = useState(1);      // canales del horno
+  const [folienbreite, setFolienbreite] = useState(415);  // ancho de bobina (mm)
+  const [rapport,      setRapport]      = useState(880);  // largo rapport (mm)
+  const [tipoFilm, setTipoFilm] = useState('cristal');
+  const [producto, setProducto] = useState('BNQ 500 ×12');
+  const [cliente,  setCliente]  = useState('');
+
+  // UI
+  const [configs,  setConfigs]  = useState([]);
+  const [cfgName,  setCfgName]  = useState('');
+  const [showSave, setShowSave] = useState(false);
+  const [showLoad, setShowLoad] = useState(false);
+
+  // ── CALCULATED (todos outputs) ──
+  const ladoLargo  = ladoB * dia;
+  const ladoTop    = ladoA * dia;
+  const canal      = folienbreite / canales;
+  const oreja      = Math.max(0, (canal - ladoLargo) / 2);
+  const anchoTop   = (ladoA - 1) * dia + tapa;
+  const wT         = (dia - tapa) / 2;
+  const hT         = Math.max(0, alt - altCil);
+  const lT         = Math.sqrt(hT * hT + wT * wT);
+  const perimetro  = ladoLargo + 2 * altCil + 2 * lT + anchoTop;
+  const solape     = Math.max(0, rapport - perimetro);
+  const solapeLado = solape / 2;
+
+  // Cotas A–F (el solape se distribuye desde el centro hacia los bordes)
+  const medioFondo = ladoLargo / 2;
+  const ptA = medioFondo - solapeLado;
+  const ptB = ptA + altCil;
+  const ptC = ptB + lT;
+  const ptD = ptC + anchoTop;
+  const ptE = ptD + lT;
+  const ptF = ptE + altCil;
+  const pts = { A: ptA, B: ptB, C: ptC, D: ptD, E: ptE, F: ptF };
+
+  const packT      = ladoLargo;
+  const packL      = ladoTop;
+  const bobTotal   = folienbreite;
+  const corte      = rapport;
+
+  const warnings   = validate({ altCil, alt, tapa, dia, solape, ladoA, ladoB, micron });
+
+  // ── CONFIG PERSISTENCE ──
+  const applyConfig = (p) => {
+    setLadoA(p.ladoA ?? p.N ?? p.botL ?? 3);
+    setLadoB(p.ladoB ?? p.M ?? p.botT ?? 4);
+    setDia(p.dia);       setAlt(p.alt);     setAltCil(p.altCil);
+    setTapa(p.tapa);     setMicron(p.micron); setCanales(p.canales);
+    setFolienbreite(p.folienbreite ?? p.bobinaM ?? p.bobina ?? 415);
+    setRapport(p.rapport ?? p.pasoArte ?? p.paso ?? 880);
+    setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
+  };
+
+  const saveConfig = () => {
+    if (!cfgName.trim()) return;
+    const c = {
+      n: cfgName, t: new Date().toLocaleDateString('es-AR'),
+      ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
+      folienbreite, rapport, tipoFilm,
+    };
+    const nc = [...configs, c];
+    setConfigs(nc);
+    setCfgName(''); setShowSave(false);
+  };
+
+  const deleteCfg = (i) => {
+    const nc = configs.filter((_, j) => j !== i);
+    setConfigs(nc);
+  };
+
+  // ── SVG PLAN VIEW ──
+  const ML = 95, MR = 90, MT = 50, MB = 60;
+  const packXStart = (corte - ladoTop) / 2;
+  const today = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+  const solapePathStart = solapeLado; // alias para SVG
+
+  // Perfil lateral: A y F en los bordes del pack (interno), S/SS en el centro del fondo
+  // El solape es el tramo extra que va FUERA de A y F (hacia el centro, por debajo)
+  const sideFilmParts = [
+    `M ${ladoTop / 2} ${alt}`,          // S/SS: centro del fondo
+    `L 0 ${alt}`,                        // borde izquierdo del pack (= punto A)
+    `L 0 ${alt - altCil}`,               // sube lateral hasta hombro (= punto B)
+  ];
+  for (let i = 0; i < ladoA; i++) {
+    const neckLeft  = i * dia + (dia - tapa) / 2;
+    const neckRight = i * dia + (dia + tapa) / 2;
+    sideFilmParts.push(`L ${neckLeft} 0`);   // punto C (i=0)
+    sideFilmParts.push(`L ${neckRight} 0`);
+  }
+  sideFilmParts.push(`L ${ladoTop} ${alt - altCil}`);   // punto E
+  sideFilmParts.push(`L ${ladoTop} ${alt}`);             // punto F: borde derecho
+  sideFilmParts.push(`L ${ladoTop / 2} ${alt}`);         // vuelve al S/SS
+  const sideFilmPath = sideFilmParts.join(' ');
+
+  // Tramos de solape (se dibujan separados, punteados, desde A y F hacia el centro)
+  const solapePathL = `M ${ladoTop/2} ${alt} L ${solapeLado} ${alt}`;
+  const solapePathR = `M ${ladoTop - solapeLado} ${alt} L ${ladoTop/2} ${alt}`;
+
+  const sidePoints = [
+    ['A', 0,                                    alt,          -1],
+    ['B', 0,                                    alt - altCil, -1],
+    ['C', (dia - tapa) / 2,                     0,            -1],
+    ['D', (ladoA - 1) * dia + (dia + tapa) / 2, 0,             1],
+    ['E', ladoTop,                              alt - altCil,  1],
+    ['F', ladoTop,                              alt,           1],
+  ];
+
+  // ── RENDER ──
+  return (
+    <div className="app-shell min-h-screen p-4">
+      <div className="max-w-[1500px] mx-auto">
+
+        {/* ══ DRAWING SHEET ══════════════════════════════════════════════════════ */}
+        <div className="print-sheet bg-white">
+
+          {/* ── HEADER ── */}
+          <div className="no-print" style={{ borderBottom: '2px solid #111' }}>
+            <div className="flex items-stretch flex-wrap">
+
+              {/* Logo Coca-Cola style */}
+              <div className="flex items-center gap-0" style={{ borderRight: '2px solid #111' }}>
+                <div className="px-5 py-3" style={{ background: '#E61C24' }}>
+                  <div className="text-2xl font-black text-white leading-none tracking-tight">LAB</div>
+                  <div className="text-2xl font-black text-white leading-none tracking-tight">TERMO</div>
+                </div>
+                <div className="px-4 py-3 bg-white">
+                  <div className="text-[8px] font-mono text-gray-400 uppercase tracking-[4px]">Film</div>
+                  <div className="text-[8px] font-mono text-gray-400 uppercase tracking-[4px]">Termocontraíble</div>
+                  <div className="text-[8px] font-mono text-gray-400 uppercase tracking-[4px]">Calculador</div>
+                </div>
+              </div>
+
+              {/* Save/Load */}
+              <div className="px-4 py-2 flex flex-col justify-center" style={{ borderRight: '1px solid #e5e5e5' }}>
+                <div className="text-[8px] font-mono text-gray-400 uppercase tracking-wider mb-1.5">Configuraciones</div>
+                <div className="flex gap-1">
+                  <button onClick={() => { setShowSave(!showSave); setShowLoad(false); }}
+                    className="px-2.5 py-1 text-[10px] font-mono font-bold transition-colors"
+                    style={{ border: '1px solid #16a34a', color: '#16a34a', background: '#fff' }}>
+                    + Guardar
+                  </button>
+                  <button onClick={() => { setShowLoad(!showLoad); setShowSave(false); }}
+                    className="px-2.5 py-1 text-[10px] font-mono font-bold transition-colors"
+                    style={{ border: '1px solid #2563eb', color: '#2563eb', background: '#fff' }}>
+                    Cargar ({configs.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Print */}
+              <div className="px-4 py-2 flex items-center ml-auto">
+                <button onClick={() => window.print()}
+                  className="px-4 py-2 text-[10px] font-mono font-bold text-white transition-colors"
+                  style={{ background: '#111', border: '1px solid #111' }}>
+                  ▤ IMPRIMIR / PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Warnings */}
+            {warnings.length > 0 && (
+              <div className="px-4 py-2 flex gap-3 items-center flex-wrap"
+                   style={{ background: '#fff7ed', borderTop: '1px solid #fed7aa' }}>
+                <span className="text-[9px] font-mono font-black text-amber-700 uppercase tracking-wider">⚠ Advertencias:</span>
+                {warnings.map((w, i) => (
+                  <span key={i} className="text-[9px] font-mono text-amber-700 border border-amber-300 px-2 py-0.5 bg-white">{w}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Save dialog */}
+            {showSave && (
+              <div className="px-4 py-2 flex gap-2 items-center flex-wrap"
+                   style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0' }}>
+                <span className="text-[10px] font-mono text-gray-600">Nombre:</span>
+                <input value={cfgName} onChange={e => setCfgName(e.target.value)}
+                  placeholder="ej: CC 3×2 PET Córdoba"
+                  onKeyDown={e => e.key === 'Enter' && saveConfig()}
+                  className="border border-gray-400 px-2 py-1 text-sm font-mono w-64 focus:outline-none" />
+                <button onClick={saveConfig}
+                  className="px-3 py-1 text-white text-[10px] font-mono font-bold"
+                  style={{ background: '#16a34a' }}>Guardar</button>
+                <button onClick={() => setShowSave(false)}
+                  className="px-3 py-1 text-white text-[10px] font-mono"
+                  style={{ background: '#9ca3af' }}>×</button>
+              </div>
+            )}
+
+            {/* Load dialog */}
+            {showLoad && (
+              <div className="px-4 py-2" style={{ background: '#eff6ff', borderTop: '1px solid #bfdbfe' }}>
+                {configs.length === 0
+                  ? <span className="text-[10px] font-mono text-gray-500">Sin configuraciones guardadas.</span>
+                  : <div className="flex flex-wrap gap-2">
+                      {configs.map((c, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-white px-2 py-1"
+                             style={{ border: '1px solid #bfdbfe' }}>
+                          <button onClick={() => { applyConfig(c); setShowLoad(false); }}
+                            className="text-[10px] font-mono text-blue-700 hover:text-blue-900">
+                            {c.n} <span className="text-gray-400 text-[9px]">({c.t})</span>
+                          </button>
+                          <button onClick={() => deleteCfg(i)}
+                            className="text-red-400 hover:text-red-600 text-xs leading-none">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                }
+              </div>
+            )}
+          </div>
+
+          {/* ── BODY ── */}
+          <div className="workspace-grid">
+
+            {/* ─────────── LEFT — INPUTS ─────────── */}
+            <aside className="control-panel">
+
+              {/* 01 DISPOSICIÓN */}
+              <div style={{ borderBottom: '1px solid #e5e5e5' }}>
+                <SectionHeader num="01" label="Disposición" />
+                <div className="p-3 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Botellas en horizontal">
+                      <input type="number" value={ladoA} onChange={e => setLadoA(+e.target.value)} className={inp} />
+                    </Field>
+                    <Field label="Botellas en vertical">
+                      <input type="number" value={ladoB} onChange={e => setLadoB(+e.target.value)} className={inp} />
+                    </Field>
+                  </div>
+                  <Field label="Diámetro de botella (mm)">
+                    <input type="number" step="0.1" value={dia} onChange={e => setDia(+e.target.value)} className={inp} />
+                    <div className="text-[7px] font-mono text-gray-400 mt-0.5 leading-tight">
+                      diámetro mayor = distancia entre centros
+                    </div>
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Altura total (mm)">
+                      <input type="number" step="0.1" value={alt} onChange={e => setAlt(+e.target.value)} className={inp} />
+                    </Field>
+                    <Field label="Altura hasta el hombro (mm)">
+                      <input type="number" step="0.1" value={altCil}
+                        onChange={e => setAltCil(+e.target.value)}
+                        className={altCil > alt ? `${inp} border-red-500 bg-red-50` : inp} />
+                    </Field>
+                  </div>
+                  <Field label="Diámetro de tapa (mm)">
+                    <input type="number" step="0.1" value={tapa} onChange={e => setTapa(+e.target.value)} className={inpRed} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* 02 BOBINA */}
+              <div style={{ borderBottom: '1px solid #e5e5e5' }}>
+                <SectionHeader num="02" label="Datos de Bobina" />
+                <div className="p-3 space-y-2.5">
+                  <Field label="Ancho de bobina (mm)">
+                    <input type="number" step="0.5" value={folienbreite} onChange={e => setFolienbreite(+e.target.value)} className={inpAmber} />
+                  </Field>
+                  <Field label="Largo de repetición (mm)">
+                    <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
+                  </Field>
+                  <Field label="Horno">
+                    <select value={canales} onChange={e => setCanales(+e.target.value)} className={inp}>
+                      <option value={1}>Monocanal</option>
+                      <option value={2}>Doble Canal</option>
+                    </select>
+                  </Field>
+                </div>
+              </div>
+
+              {/* 03 MATERIAL */}
+              <div style={{ borderBottom: '1px solid #e5e5e5' }}>
+                <SectionHeader num="03" label="Material" />
+                <div className="p-3 space-y-2.5">
+                  <Toggle
+                    value={tipoFilm}
+                    onChange={setTipoFilm}
+                    options={[{ val:'cristal', label:'CRISTAL' }, { val:'arte', label:'CON ARTE' }]}
+                  />
+                  <Field label="Espesor Film (µm)">
+                    <input type="number" value={micron} onChange={e => setMicron(+e.target.value)} className={inp} />
+                  </Field>
+                </div>
+              </div>
+            </aside>
+
+            {/* ─────────── RIGHT — DRAWING ─────────── */}
+            <div className="p-4 space-y-4 bg-white">
+
+              {/* ── HERO NUMBERS ── */}
+              <div className="results-grid">
+                {[
+                  {
+                    label: 'FOLIENBREITE (A)',
+                    value: folienbreite.toFixed(1),
+                    sub:   canales > 1 ? `${canales} canales × ${canal.toFixed(1)} mm` : 'Monocanal',
+                    accent: true,
+                  },
+                  {
+                    label: 'LARGO DE REPETICIÓN',
+                    value: rapport.toFixed(1),
+                    sub:   `Perímetro pack: ${perimetro.toFixed(1)} mm`,
+                    accent: false,
+                  },
+                  {
+                    label: 'OREJAS (c/lado)',
+                    value: oreja.toFixed(1),
+                    sub:   'Repetición menos lado largo ÷ 2',
+                    accent: false,
+                    green: true,
+                  },
+                  {
+                    label: 'SOLAPE S/SS',
+                    value: solape.toFixed(1),
+                    sub:   `${solapeLado.toFixed(1)} mm c/lado`,
+                    accent: false,
+                    blue: true,
+                  },
+                ].map(({ label, value, sub, accent, green, blue }, i) => (
+                  <div key={label}
+                    className={`result-card ${accent ? 'result-card-primary' : ''} ${green ? 'result-card-green' : ''} ${blue ? 'result-card-blue' : ''}`}>
+                    <div className="result-label">{label}</div>
+                    <div className="result-value">{value}</div>
+                    <div>
+                      <div className="result-detail">{sub}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── PLAN VIEW SVG ── */}
+              <div style={{ border: '1px solid #d1d5db' }}>
+                <div className="px-3 py-1.5 flex justify-between items-center"
+                     style={{ borderBottom: '1px solid #e5e5e5', background: '#fafafa' }}>
+                  <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px]">
+                    VISTA SUPERIOR — {canales === 1 ? 'Monocanal' : 'Doble Canal'} — Sentido horizontal
+                  </span>
+                  <span className="text-[8px] font-mono text-gray-400">
+                    {corte.toFixed(0)} × {bobTotal.toFixed(0)} mm
+                  </span>
+                </div>
+                <svg
+                  width="100%"
+                  style={{ maxHeight: '340px', display: 'block' }}
+                  viewBox={`${-ML} ${-MT} ${corte + ML + MR} ${bobTotal + MT + MB}`}
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <defs>
+                    {[['mD','#1e293b'],['mB','#2563eb'],['mG','#059669'],['mR','#E61C24']].map(([id, fill]) => (
+                      <marker key={id} id={id} viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill={fill} />
+                      </marker>
+                    ))}
+                    <pattern id="pg" width="25" height="25" patternUnits="userSpaceOnUse">
+                      <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#f0f0f0" strokeWidth="0.5" />
+                    </pattern>
+                  </defs>
+
+                  <rect x={-ML} y={-MT} width={corte + ML + MR} height={bobTotal + MT + MB} fill="url(#pg)" />
+                  <rect x={0} y={0} width={corte} height={bobTotal} fill="#fef2f2" stroke="#d1d5db" strokeWidth="0.5" />
+
+                  {canales === 2 && <>
+                    <line x1={0} y1={canal} x2={corte} y2={canal}
+                      stroke="#2563eb" strokeWidth="1.5" strokeDasharray="8,5" />
+                    <text x={corte * 0.62} y={canal - 5}
+                      fill="#2563eb" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                      letterSpacing="1" textAnchor="middle">FOLIENSCHNITT / CORTE LONG.</text>
+                  </>}
+
+                  {Array.from({ length: canales }).map((_, ci) => (
+                    <g key={ci}>
+                      <rect x={packXStart} y={ci * canal + oreja} width={ladoTop} height={ladoLargo}
+                        fill="none" stroke="#94a3b8" strokeWidth="0.8" strokeDasharray="5,3" />
+                      {Array.from({ length: ladoA }).map((_, xi) =>
+                        Array.from({ length: ladoB }).map((_, yi) => (
+                          <circle key={`${ci}-${xi}-${yi}`}
+                            cx={packXStart + xi * dia + dia / 2}
+                            cy={ci * canal + oreja + yi * dia + dia / 2}
+                            r={dia / 2 - 1.5}
+                            fill="white" stroke="#475569" strokeWidth="1.5" />
+                        ))
+                      )}
+                    </g>
+                  ))}
+
+                  <line x1={0}     y1={-MT + 5} x2={0}     y2={bobTotal + 16} stroke="#E61C24" strokeWidth="2.5" />
+                  <line x1={corte} y1={-MT + 5} x2={corte} y2={bobTotal + 16} stroke="#E61C24" strokeWidth="2" strokeDasharray="7,5" />
+                  <text x={-8} y={bobTotal * 0.6} fill="#E61C24" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                    textAnchor="middle" transform={`rotate(-90, -8, ${bobTotal * 0.6})`}>SCHNITT ①</text>
+                  <text x={corte + 8} y={bobTotal * 0.6} fill="#E61C24" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                    textAnchor="middle" transform={`rotate(-90, ${corte + 8}, ${bobTotal * 0.6})`}>SCHNITT ②</text>
+
+                  <line x1={corte * 0.12} y1={-32} x2={corte * 0.88} y2={-32}
+                    stroke="#475569" strokeWidth="1.5" markerEnd="url(#mD)" />
+                  <text x={corte / 2} y={-37} fill="#475569" fontSize="9" textAnchor="middle"
+                    fontFamily="monospace" letterSpacing="1.5">LAUFRICHTUNG / SENTIDO DE MARCHA</text>
+
+                  {/* Left dimension lines */}
+                  <line x1={-ML+5} y1={0}            x2={-8}  y2={0}            stroke="#ddd" strokeWidth="0.5" />
+                  <line x1={-ML+5} y1={oreja}         x2={-44} y2={oreja}         stroke="#ddd" strokeWidth="0.5" />
+                  <line x1={-ML+5} y1={oreja+packT}   x2={-44} y2={oreja+packT}   stroke="#ddd" strokeWidth="0.5" />
+                  <line x1={-ML+5} y1={canal}         x2={-8}  y2={canal}         stroke="#ddd" strokeWidth="0.5" />
+                  {canales === 2 && <line x1={-ML+5} y1={bobTotal} x2={-8} y2={bobTotal} stroke="#ddd" strokeWidth="0.5" />}
+
+                  {oreja > 8 && <>
+                    <line x1={-74} y1={0} x2={-74} y2={oreja}
+                      stroke="#059669" strokeWidth="1.2" markerStart="url(#mG)" markerEnd="url(#mG)" />
+                    <rect x={-93} y={oreja/2-8} width={36} height={16} fill="white" />
+                    <text x={-75} y={oreja/2+4} fill="#059669" fontSize="11" fontFamily="monospace"
+                      fontWeight="bold" textAnchor="middle">{oreja.toFixed(1)}</text>
+                  </>}
+
+                  <line x1={-74} y1={oreja} x2={-74} y2={oreja+packT}
+                    stroke="#111" strokeWidth="1.2" markerStart="url(#mD)" markerEnd="url(#mD)" />
+                  <rect x={-93} y={oreja+packT/2-8} width={36} height={16} fill="white" />
+                  <text x={-75} y={oreja+packT/2+4} fill="#111" fontSize="11" fontFamily="monospace"
+                    fontWeight="bold" textAnchor="middle">{packT.toFixed(0)}</text>
+
+                  {oreja > 8 && <>
+                    <line x1={-74} y1={oreja+packT} x2={-74} y2={canal}
+                      stroke="#059669" strokeWidth="1.2" markerStart="url(#mG)" markerEnd="url(#mG)" />
+                    <rect x={-93} y={oreja+packT+oreja/2-8} width={36} height={16} fill="white" />
+                    <text x={-75} y={oreja+packT+oreja/2+4} fill="#059669" fontSize="11" fontFamily="monospace"
+                      fontWeight="bold" textAnchor="middle">{oreja.toFixed(1)}</text>
+                  </>}
+
+                  <line x1={-22} y1={0} x2={-22} y2={canal}
+                    stroke="#2563eb" strokeWidth="2" markerStart="url(#mB)" markerEnd="url(#mB)" />
+                  <rect x={-46} y={canal/2-10} width={48} height={20} fill="white" stroke="#2563eb" strokeWidth="0.8" />
+                  <text x={-22} y={canal/2+5} fill="#2563eb" fontSize="12" fontFamily="monospace"
+                    fontWeight="bold" textAnchor="middle">{canal.toFixed(1)}</text>
+
+                  {/* Right: total bobina */}
+                  <line x1={corte+MR-10} y1={0} x2={corte+MR-10} y2={bobTotal}
+                    stroke="#2563eb" strokeWidth="2.5" markerStart="url(#mB)" markerEnd="url(#mB)" />
+                  <rect x={corte+MR-60} y={bobTotal/2-13} width={63} height={26}
+                    fill="white" stroke="#2563eb" strokeWidth="1.5" />
+                  <text x={corte+MR-29} y={bobTotal/2+1} fill="#2563eb" fontSize="11"
+                    fontFamily="monospace" fontWeight="bold" textAnchor="middle">A</text>
+                  <text x={corte+MR-29} y={bobTotal/2+13} fill="#2563eb" fontSize="10"
+                    fontFamily="monospace" textAnchor="middle">{bobTotal.toFixed(0)}</text>
+
+                  {/* Bottom: S */}
+                  <line x1={0}     y1={bobTotal+2} x2={0}     y2={bobTotal+MB-4} stroke="#E61C24" strokeWidth="0.7" strokeDasharray="3,3" />
+                  <line x1={corte} y1={bobTotal+2} x2={corte} y2={bobTotal+MB-4} stroke="#E61C24" strokeWidth="0.7" strokeDasharray="3,3" />
+                  <line x1={0} y1={bobTotal+MB-8} x2={corte} y2={bobTotal+MB-8}
+                    stroke="#E61C24" strokeWidth="2" markerStart="url(#mR)" markerEnd="url(#mR)" />
+                  <rect x={corte/2-65} y={bobTotal+MB-20} width={130} height={20}
+                    fill="white" stroke="#E61C24" strokeWidth="1" />
+                  <text x={corte/2} y={bobTotal+MB-7} fill="#E61C24" fontSize="12"
+                    fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+                    S = {corte.toFixed(1)} mm
+                  </text>
+                </svg>
+              </div>
+
+              {/* ── BOTTOM ROW ── */}
+              <div className="grid grid-cols-4 gap-3 pt-3" style={{ borderTop: '1px solid #e5e5e5' }}>
+
+                {/* 1. A-F TABLE */}
+                <div>
+                  <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
+                    Mapeo del diseño
+                  </div>
+                  <table className="w-full text-sm font-mono border-collapse"
+                         style={{ border: '1.5px solid #111' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1.5px solid #111' }}>
+                        <th className="px-2 py-1 font-normal text-xs text-center" style={{ borderRight:'1px solid #111' }}>0—</th>
+                        <th className="px-2 py-1 font-bold text-right" style={{ borderRight:'1.5px solid #111' }}>mm</th>
+                        <th className="px-2 py-1 font-normal text-xs text-center" style={{ borderRight:'1px solid #111' }}>0—</th>
+                        <th className="px-2 py-1 font-bold text-right">mm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[['A','D'],['B','E'],['C','F']].map(([l, r]) => (
+                        <tr key={l} style={{ borderBottom: '1px solid #e5e5e5' }}>
+                          <td className="px-2 py-1.5 text-center font-black" style={{ borderRight:'1px solid #111' }}>{l}</td>
+                          <td className="px-2 py-1.5 text-right" style={{ borderRight:'1.5px solid #111' }}>{pts[l].toFixed(2)}</td>
+                          <td className="px-2 py-1.5 text-center font-black" style={{ borderRight:'1px solid #111' }}>{r}</td>
+                          <td className="px-2 py-1.5 text-right">{pts[r].toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="text-[9px] font-mono text-gray-400 mt-1">
+                    Perímetro pack: {perimetro.toFixed(2)} mm
+                  </div>
+                  <div className={`text-[9px] font-mono mt-0.5 font-bold ${solape > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    Solape S/SS: {solape.toFixed(2)} mm ({solapeLado.toFixed(2)} mm c/lado)
+                  </div>
+                </div>
+
+                {/* 2. PERFIL LATERAL — corregido */}
+                <div>
+                  <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
+                    Vista lateral
+                  </div>
+                  <div className="border border-gray-200 bg-white overflow-hidden">
+                    <svg width="100%" style={{ maxHeight:'165px', display:'block' }}
+                      viewBox={`-35 -15 ${ladoTop + 60} ${alt + 35}`}
+                      preserveAspectRatio="xMidYMid meet">
+                      {/* siluetas de botellas */}
+                      {Array.from({ length: ladoA }).map((_, i) => (
+                        <path key={i}
+                          d={`M ${i*dia} ${alt} L ${i*dia} ${alt-altCil}
+                              L ${i*dia+dia/2-tapa/2} 0 L ${i*dia+dia/2+tapa/2} 0
+                              L ${i*dia+dia} ${alt-altCil} L ${i*dia+dia} ${alt} Z`}
+                          fill="none" stroke="#94a3b8" strokeWidth="1.2" />
+                      ))}
+                      {/* film principal */}
+                      <path d={sideFilmPath} fill="none" stroke="#E61C24" strokeWidth="2.5" strokeLinejoin="round" />
+                      {/* solape: tramos punteados desde A y F hacia S/SS */}
+                      <path d={solapePathL} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
+                      <path d={solapePathR} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
+                      {/* puntos A–F */}
+                      {sidePoints.map(([l, cx, cy, side]) => (
+                        <g key={l}>
+                          <circle cx={cx} cy={cy} r="3.5" fill="#E61C24" />
+                          <text x={cx + side * 9} y={cy + 4} fill="#E61C24" fontSize="11" fontWeight="bold"
+                            fontFamily="monospace" textAnchor={side < 0 ? 'end' : 'start'}>{l}</text>
+                        </g>
+                      ))}
+                      {/* S/SS: punto de sellado en el centro del fondo */}
+                      <circle cx={ladoTop/2} cy={alt} r="4" fill="#059669" />
+                      <text x={ladoTop/2} y={alt + 16} fill="#059669" fontSize="9"
+                        textAnchor="middle" fontFamily="monospace" fontWeight="bold">S/SS</text>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 3. 3D BOBINA */}
+                <div>
+                  <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
+                    Esquema de bobina
+                  </div>
+                  <div className="border border-gray-200 bg-white overflow-hidden">
+                    <svg width="100%" style={{ maxHeight:'165px', display:'block' }}
+                      viewBox="0 0 260 178" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <marker id="a3d" viewBox="0 0 10 10" refX="9" refY="5"
+                          markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#475569" />
+                        </marker>
+                      </defs>
+                      <g transform="translate(8,4)">
+                        <path d="M 68 18 L 183 50 A 17 35 0 0 1 183 120 L 68 88 A 17 35 0 0 0 68 18 Z"
+                          fill="#fef2f2" stroke="#94a3b8" strokeWidth="1.5" />
+                        <path d="M 68 88 L 183 120 L 128 166 L 13 134 Z"
+                          fill="#dbeafe" stroke="#3b82f6" strokeWidth="1.5" opacity="0.85" />
+                        <ellipse cx="183" cy="85" rx="17" ry="35" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5" />
+                        <ellipse cx="183" cy="85" rx="5"  ry="10" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1" />
+                        <ellipse cx="68"  cy="53" rx="17" ry="35" fill="#fef2f2" stroke="#94a3b8" strokeWidth="1.5" />
+                        <line x1="13" y1="134" x2="128" y2="166"
+                          stroke="#2563eb" strokeWidth="1.5" markerStart="url(#a3d)" markerEnd="url(#a3d)" />
+                        <text x="66" y="157" fill="#2563eb" fontSize="11" fontWeight="bold"
+                          fontFamily="monospace" transform="rotate(14,66,157)" textAnchor="middle">
+                          (A) {bobTotal.toFixed(0)}
+                        </text>
+                        <line x1="128" y1="166" x2="183" y2="115"
+                          stroke="#E61C24" strokeWidth="1.5" markerStart="url(#a3d)" markerEnd="url(#a3d)" />
+                        <text x="160" y="147" fill="#E61C24" fontSize="11" fontWeight="bold"
+                          fontFamily="monospace" transform="rotate(-44,160,147)" textAnchor="middle">
+                          (S) {corte.toFixed(0)}
+                        </text>
+                        <line x1="13" y1="100" x2="128" y2="132"
+                          stroke="#2563eb" strokeWidth="1.5" strokeDasharray="5,3" />
+                        <text x="66" y="107" fill="#2563eb" fontSize="8"
+                          fontFamily="monospace" transform="rotate(14,66,107)" textAnchor="middle">Corte</text>
+                      </g>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 4. DIRECCIÓN DE AVANCE */}
+                <div>
+                  <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
+                    Dirección de Avance
+                  </div>
+                  <div className="border border-gray-200 bg-white p-2">
+                    <div className="text-[8px] font-mono text-gray-400 uppercase tracking-widest mb-1">Dirección de avance</div>
+                    <svg width="100%" height="42" viewBox="0 0 155 42">
+                      <ellipse cx="18" cy="21" rx="13" ry="19" fill="#fee2e2" stroke="#94a3b8" strokeWidth="1.5" />
+                      <ellipse cx="18" cy="21" rx="4"  ry="6"  fill="#fca5a5" stroke="#94a3b8" />
+                      <line x1="31" y1="21" x2="143" y2="21" stroke="#374151" strokeWidth="1.5" />
+                      <polygon points="135,15 150,21 135,27" fill="#374151" />
+                      <text x="88" y="13" fill="#374151" fontSize="8" textAnchor="middle" fontFamily="monospace">HORNO →</text>
+                      <text x="88" y="35" fill="#9ca3af" fontSize="7" textAnchor="middle" fontFamily="monospace">
+                        {tipoFilm === 'arte' ? 'DECORADO' : 'CRISTAL S/E'}
+                      </text>
+                    </svg>
+                  </div>
+                </div>
+
+              </div>{/* end bottom row */}
+            </div>{/* end right column */}
+          </div>{/* end body grid */}
+
+        </div>{/* end drawing sheet */}
+      </div>
+    </div>
+  );
+}
