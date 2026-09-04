@@ -4,27 +4,28 @@ import React, { useState, useEffect } from 'react';
 
 function SectionHeader({ num, label }) {
   return (
-    <div className="section-header">
-      <span className="section-number">
+    <div className="flex items-center gap-2 px-3 py-2"
+         style={{ borderBottom: '1px solid #e5e5e5', background: '#fafafa' }}>
+      <span className="text-[9px] font-mono font-black text-white bg-[#E61C24] px-1.5 py-0.5 leading-none">
         {num}
       </span>
-      <span className="section-title">{label}</span>
+      <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px]">{label}</span>
     </div>
   );
 }
 
 function Field({ label, children }) {
   return (
-    <div className="field-group">
-      <div className="field-label">{label}</div>
+    <div>
+      <div className="text-[8px] font-mono font-bold text-gray-400 uppercase tracking-widest mb-1">{label}</div>
       {children}
     </div>
   );
 }
 
-const inp = "input-control";
-const inpRed = "input-control input-control-highlight";
-const inpAmber = "input-control input-control-highlight";
+const inp = "w-full bg-white border border-gray-300 px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-[#E61C24] rounded-none transition-colors";
+const inpRed = "w-full bg-red-50 border border-[#E61C24] px-2 py-1.5 text-sm font-mono font-bold text-[#CC0000] focus:outline-none rounded-none";
+const inpAmber = "w-full bg-amber-50 border border-amber-400 px-2 py-1.5 text-sm font-mono font-bold text-amber-800 focus:outline-none rounded-none";
 
 // ─── TOGGLE BUTTON PAIR ────────────────────────────────────────────────────────
 function Toggle({ value, onChange, options }) {
@@ -47,12 +48,12 @@ function Toggle({ value, onChange, options }) {
 // ─── VALIDATION ────────────────────────────────────────────────────────────────
 function validate(f) {
   const warns = [];
-  if (f.altCil > f.alt) warns.push(`La altura del cuerpo recto (${f.altCil}) supera la altura total (${f.alt})`);
-  if (f.tapa >= f.dia) warns.push(`El diámetro de tapa (${f.tapa}) debe ser menor al diámetro de botella (${f.dia})`);
-  if (f.ladoA < 1 || f.ladoB < 1) warns.push('La disposición mínima es 1 × 1');
-  if (f.micron < 30) warns.push('El espesor es menor a 30 µm');
-  if (!f.entraEnCanal) warns.push(`El paquete necesita ${f.ladoLargo.toFixed(1)} mm por canal, pero solo hay ${f.canal.toFixed(1)} mm disponibles`);
-  if (f.modoCorte === 'manual' && f.diferenciaCorte < 0) warns.push(`El largo manual es ${Math.abs(f.diferenciaCorte).toFixed(1)} mm menor que el perfil geométrico`);
+  if (f.altCil > f.alt) warns.push('La altura del cuerpo recto no puede superar la altura total.');
+  if (f.tapa >= f.dia) warns.push('El diámetro de tapa debe ser menor al diámetro de botella.');
+  if (f.ladoA < 1 || f.ladoB < 1) warns.push('La disposición mínima es 1 × 1.');
+  if (f.micron < 30) warns.push('El espesor es menor a 30 µm.');
+  if (!f.entraEnCanal) warns.push(`El paquete requiere ${f.anchoPaquete.toFixed(1)} mm por canal y solo hay ${f.canal.toFixed(1)} mm.`);
+  if (f.modoCorte === 'manual' && f.diferenciaCorte < 0) warns.push(`El largo manual es ${Math.abs(f.diferenciaCorte).toFixed(1)} mm menor que el perfil calculado.`);
   return warns;
 }
 
@@ -71,6 +72,7 @@ export default function App() {
   const [folienbreite, setFolienbreite] = useState(415);  // ancho de bobina (mm)
   const [rapport,      setRapport]      = useState(880);  // largo de corte manual (mm)
   const [modoCorte, setModoCorte] = useState('auto');
+  const [orientacion, setOrientacion] = useState('normal');
   const [tipoFilm, setTipoFilm] = useState('cristal');
   const [producto, setProducto] = useState('BNQ 500 ×12');
   const [cliente,  setCliente]  = useState('');
@@ -82,30 +84,29 @@ export default function App() {
   const [showLoad, setShowLoad] = useState(false);
 
   // ── CÁLCULOS ──
-  const ladoLargo = ladoB * dia;
-  const ladoTop = ladoA * dia;
+  // La orientación define qué cantidad queda sobre el ancho de bobina.
+  const botellasCorte = orientacion === 'normal' ? ladoA : ladoB;
+  const botellasBobina = orientacion === 'normal' ? ladoB : ladoA;
+  const largoPaquete = botellasCorte * dia;
+  const anchoPaquete = botellasBobina * dia;
   const canal = folienbreite / canales;
-  const margenLateralBruto = (canal - ladoLargo) / 2;
-  const entraEnCanal = margenLateralBruto >= 0;
-  const oreja = Math.max(0, margenLateralBruto);
-  const deficitCanal = Math.max(0, ladoLargo - canal);
-  const anchoBobinaMinimo = ladoLargo * canales;
+  const margenBruto = (canal - anchoPaquete) / 2;
+  const entraEnCanal = margenBruto >= 0;
+  const oreja = Math.max(0, margenBruto);
+  const deficitCanal = Math.max(0, anchoPaquete - canal);
+  const anchoBobinaMinimo = anchoPaquete * canales;
 
-  const anchoTop = (ladoA - 1) * dia + tapa;
+  const anchoTop = (botellasCorte - 1) * dia + tapa;
   const desplazamientoHombro = Math.max(0, (dia - tapa) / 2);
   const alturaHombro = Math.max(0, alt - altCil);
   const longitudHombro = Math.sqrt(alturaHombro ** 2 + desplazamientoHombro ** 2);
-  const perimetro = ladoLargo + (2 * altCil) + (2 * longitudHombro) + anchoTop;
-
-  // Las fichas técnicas redondean el recorrido geométrico al siguiente múltiplo de 10 mm.
-  const largoCorteCalculado = Math.ceil(perimetro / 10) * 10;
+  const perfilGeometrico = anchoPaquete + 2 * altCil + 2 * longitudHombro + anchoTop;
+  const largoCorteCalculado = Math.ceil(perfilGeometrico / 10) * 10;
   const corte = modoCorte === 'auto' ? largoCorteCalculado : rapport;
-  const diferenciaCorte = corte - perimetro;
+  const diferenciaCorte = corte - perfilGeometrico;
   const ajustePorExtremo = diferenciaCorte / 2;
 
-  // Puntos A-F medidos desde el inicio del corte.
-  const medioFondo = ladoLargo / 2;
-  const ptA = medioFondo;
+  const ptA = anchoPaquete / 2;
   const ptB = ptA + altCil;
   const ptC = ptB + longitudHombro;
   const ptD = ptC + anchoTop;
@@ -113,14 +114,17 @@ export default function App() {
   const ptF = ptE + altCil;
   const pts = { A: ptA, B: ptB, C: ptC, D: ptD, E: ptE, F: ptF };
 
-  const packT = ladoLargo;
-  const packL = ladoTop;
+  // Alias usados por los planos SVG existentes.
+  const ladoLargo = anchoPaquete;
+  const ladoTop = largoPaquete;
+  const packT = anchoPaquete;
+  const packL = largoPaquete;
   const bobTotal = folienbreite;
+  const perimetro = perfilGeometrico;
+  const solape = diferenciaCorte;
+  const solapeLado = ajustePorExtremo;
 
-  const warnings = validate({
-    altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal,
-    ladoLargo, canal, modoCorte, diferenciaCorte,
-  });
+  const warnings = validate({ altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal, anchoPaquete, canal, modoCorte, diferenciaCorte });
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -132,6 +136,7 @@ export default function App() {
     setRapport(p.rapport ?? p.pasoArte ?? p.paso ?? 880);
     setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
     setModoCorte(p.modoCorte ?? 'auto');
+    setOrientacion(p.orientacion ?? 'normal');
   };
 
   const saveConfig = () => {
@@ -139,7 +144,7 @@ export default function App() {
     const c = {
       n: cfgName, t: new Date().toLocaleDateString('es-AR'),
       ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
-      folienbreite, rapport, tipoFilm, modoCorte,
+      folienbreite, rapport, tipoFilm, modoCorte, orientacion,
     };
     const nc = [...configs, c];
     setConfigs(nc);
@@ -156,14 +161,16 @@ export default function App() {
   const packXStart = (corte - ladoTop) / 2;
   const today = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
+  const solapePathStart = solapeLado; // alias para SVG
 
   // Perfil lateral: A y F en los bordes del pack (interno), S/SS en el centro del fondo
+  // El solape es el tramo extra que va FUERA de A y F (hacia el centro, por debajo)
   const sideFilmParts = [
     `M ${ladoTop / 2} ${alt}`,          // S/SS: centro del fondo
     `L 0 ${alt}`,                        // borde izquierdo del pack (= punto A)
     `L 0 ${alt - altCil}`,               // sube lateral hasta hombro (= punto B)
   ];
-  for (let i = 0; i < ladoA; i++) {
+  for (let i = 0; i < botellasCorte; i++) {
     const neckLeft  = i * dia + (dia - tapa) / 2;
     const neckRight = i * dia + (dia + tapa) / 2;
     sideFilmParts.push(`L ${neckLeft} 0`);   // punto C (i=0)
@@ -174,12 +181,15 @@ export default function App() {
   sideFilmParts.push(`L ${ladoTop / 2} ${alt}`);         // vuelve al S/SS
   const sideFilmPath = sideFilmParts.join(' ');
 
+  // Tramos de solape (se dibujan separados, punteados, desde A y F hacia el centro)
+  const solapePathL = `M ${ladoTop/2} ${alt} L ${solapeLado} ${alt}`;
+  const solapePathR = `M ${ladoTop - solapeLado} ${alt} L ${ladoTop/2} ${alt}`;
 
   const sidePoints = [
     ['A', 0,                                    alt,          -1],
     ['B', 0,                                    alt - altCil, -1],
     ['C', (dia - tapa) / 2,                     0,            -1],
-    ['D', (ladoA - 1) * dia + (dia + tapa) / 2, 0,             1],
+    ['D', (botellasCorte - 1) * dia + (dia + tapa) / 2, 0,             1],
     ['E', ladoTop,                              alt - altCil,  1],
     ['F', ladoTop,                              alt,           1],
   ];
@@ -292,17 +302,26 @@ export default function App() {
           <div className="workspace-grid">
 
             {/* ─────────── LEFT — INPUTS ─────────── */}
-            <aside className="control-panel">
+            <div style={{ borderRight: '2px solid #111', background: '#fafafa' }}>
 
               {/* 01 DISPOSICIÓN */}
               <div style={{ borderBottom: '1px solid #e5e5e5' }}>
                 <SectionHeader num="01" label="Disposición" />
                 <div className="p-3 space-y-2.5">
+                  <Field label="Orientación del paquete sobre la bobina">
+                    <Toggle value={orientacion} onChange={setOrientacion} options={[
+                      { val:'normal', label:'LADO B SOBRE BOBINA' },
+                      { val:'girada', label:'LADO A SOBRE BOBINA' },
+                    ]} />
+                    <div className="orientation-help">
+                      Ancho usado: {botellasBobina} × {dia.toFixed(1)} = {anchoPaquete.toFixed(1)} mm
+                    </div>
+                  </Field>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Botellas en dirección del corte">
+                    <Field label="Botellas del lado A">
                       <input type="number" value={ladoA} onChange={e => setLadoA(+e.target.value)} className={inp} />
                     </Field>
-                    <Field label="Botellas sobre el ancho de bobina">
+                    <Field label="Botellas del lado B">
                       <input type="number" value={ladoB} onChange={e => setLadoB(+e.target.value)} className={inp} />
                     </Field>
                   </div>
@@ -336,22 +355,17 @@ export default function App() {
                     <input type="number" step="0.5" value={folienbreite} onChange={e => setFolienbreite(+e.target.value)} className={inpAmber} />
                   </Field>
                   <Field label="Cálculo del largo de corte">
-                    <Toggle
-                      value={modoCorte}
-                      onChange={setModoCorte}
-                      options={[{ val:'auto', label:'AUTOMÁTICO' }, { val:'manual', label:'MANUAL' }]}
-                    />
+                    <Toggle value={modoCorte} onChange={setModoCorte} options={[
+                      { val:'auto', label:'AUTOMÁTICO' },
+                      { val:'manual', label:'MANUAL' },
+                    ]} />
                   </Field>
-                  {modoCorte === 'manual' && (
+                  {modoCorte === 'manual' ? (
                     <Field label="Largo de corte manual (mm)">
                       <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
                     </Field>
-                  )}
-                  {modoCorte === 'auto' && (
-                    <div className="calculated-hint">
-                      Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong>
-                      <span>Perfil {perimetro.toFixed(1)} mm, redondeado al próximo múltiplo de 10.</span>
-                    </div>
+                  ) : (
+                    <div className="calculated-hint">Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong><span>Perfil geométrico: {perfilGeometrico.toFixed(1)} mm</span></div>
                   )}
                   <Field label="Horno">
                     <select value={canales} onChange={e => setCanales(+e.target.value)} className={inp}>
@@ -376,7 +390,7 @@ export default function App() {
                   </Field>
                 </div>
               </div>
-            </aside>
+            </div>
 
             {/* ─────────── RIGHT — DRAWING ─────────── */}
             <div className="p-4 space-y-4 bg-white">
@@ -393,13 +407,13 @@ export default function App() {
                   {
                     label: 'LARGO DE CORTE',
                     value: corte.toFixed(1),
-                    sub:   `${modoCorte === 'auto' ? 'Automático' : 'Manual'} · Perfil: ${perimetro.toFixed(1)} mm`,
+                    sub:   `${modoCorte === 'auto' ? 'Automático' : 'Manual'} · Perfil ${perfilGeometrico.toFixed(1)} mm`,
                     accent: false,
                   },
                   {
                     label: entraEnCanal ? 'MARGEN POR LADO' : 'DÉFICIT POR CANAL',
                     value: (entraEnCanal ? oreja : deficitCanal).toFixed(1),
-                    sub:   'Espacio libre por lado',
+                    sub: entraEnCanal ? 'Espacio libre por lado' : `Bobina mínima ${anchoBobinaMinimo.toFixed(1)} mm`,
                     accent: false,
                     green: true,
                   },
@@ -411,8 +425,7 @@ export default function App() {
                     blue: true,
                   },
                 ].map(({ label, value, sub, accent, green, blue }, i) => (
-                  <div key={label}
-                    className={`result-card ${accent ? 'result-card-primary' : ''} ${green ? 'result-card-green' : ''} ${blue ? 'result-card-blue' : ''}`}>
+                  <div key={label} className={`result-card ${accent ? 'result-card-primary' : ''} ${green ? 'result-card-green' : ''} ${blue ? 'result-card-blue' : ''}`}>
                     <div className="result-label">{label}</div>
                     <div className="result-value">{value}</div>
                     <div>
@@ -424,11 +437,7 @@ export default function App() {
 
               <div className={`channel-status ${entraEnCanal ? 'channel-status-ok' : 'channel-status-error'}`}>
                 <strong>{entraEnCanal ? 'Configuración compatible' : 'Configuración incompatible'}</strong>
-                <span>
-                  {entraEnCanal
-                    ? `${canal.toFixed(1)} mm disponibles por canal y ${oreja.toFixed(1)} mm libres por lado.`
-                    : `${canal.toFixed(1)} mm disponibles por canal. Se requieren al menos ${anchoBobinaMinimo.toFixed(1)} mm de bobina total.`}
-                </span>
+                <span>{entraEnCanal ? `${canal.toFixed(1)} mm por canal · margen ${oreja.toFixed(1)} mm por lado` : `${canal.toFixed(1)} mm por canal · se necesitan ${anchoBobinaMinimo.toFixed(1)} mm de bobina total`}</span>
               </div>
 
               {/* ── PLAN VIEW SVG ── */}
@@ -471,12 +480,12 @@ export default function App() {
                       letterSpacing="1" textAnchor="middle">CORTE LONGITUDINAL</text>
                   </>}
 
-                  {entraEnCanal && Array.from({ length: canales }).map((_, ci) => (
+                  {Array.from({ length: canales }).map((_, ci) => (
                     <g key={ci}>
                       <rect x={packXStart} y={ci * canal + oreja} width={ladoTop} height={ladoLargo}
                         fill="none" stroke="#94a3b8" strokeWidth="0.8" strokeDasharray="5,3" />
-                      {Array.from({ length: ladoA }).map((_, xi) =>
-                        Array.from({ length: ladoB }).map((_, yi) => (
+                      {Array.from({ length: botellasCorte }).map((_, xi) =>
+                        Array.from({ length: botellasBobina }).map((_, yi) => (
                           <circle key={`${ci}-${xi}-${yi}`}
                             cx={packXStart + xi * dia + dia / 2}
                             cy={ci * canal + oreja + yi * dia + dia / 2}
@@ -590,8 +599,8 @@ export default function App() {
                   <div className="text-[9px] font-mono text-gray-400 mt-1">
                     Perímetro pack: {perimetro.toFixed(2)} mm
                   </div>
-                  <div className="text-[9px] font-mono mt-0.5 font-bold text-blue-600">
-                    Ajuste de corte: {diferenciaCorte.toFixed(2)} mm
+                  <div className={`text-[9px] font-mono mt-0.5 font-bold ${solape > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    Solape S/SS: {solape.toFixed(2)} mm ({solapeLado.toFixed(2)} mm c/lado)
                   </div>
                 </div>
 
@@ -605,7 +614,7 @@ export default function App() {
                       viewBox={`-35 -15 ${ladoTop + 60} ${alt + 35}`}
                       preserveAspectRatio="xMidYMid meet">
                       {/* siluetas de botellas */}
-                      {Array.from({ length: ladoA }).map((_, i) => (
+                      {Array.from({ length: botellasCorte }).map((_, i) => (
                         <path key={i}
                           d={`M ${i*dia} ${alt} L ${i*dia} ${alt-altCil}
                               L ${i*dia+dia/2-tapa/2} 0 L ${i*dia+dia/2+tapa/2} 0
@@ -614,7 +623,9 @@ export default function App() {
                       ))}
                       {/* film principal */}
                       <path d={sideFilmPath} fill="none" stroke="#E61C24" strokeWidth="2.5" strokeLinejoin="round" />
-
+                      {/* solape: tramos punteados desde A y F hacia S/SS */}
+                      <path d={solapePathL} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
+                      <path d={solapePathR} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
                       {/* puntos A–F */}
                       {sidePoints.map(([l, cx, cy, side]) => (
                         <g key={l}>
@@ -634,7 +645,7 @@ export default function App() {
                 {/* 3. 3D BOBINA */}
                 <div>
                   <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
-                    Esquema de bobina
+                    Esquema Bobina
                   </div>
                   <div className="border border-gray-200 bg-white overflow-hidden">
                     <svg width="100%" style={{ maxHeight:'165px', display:'block' }}
