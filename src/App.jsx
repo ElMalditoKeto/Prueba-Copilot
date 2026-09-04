@@ -82,6 +82,8 @@ export default function App() {
   const [cfgName,  setCfgName]  = useState('');
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
+  const [geometry3DVersion, setGeometry3DVersion] = useState(0);
+  const [geometry3DSnapshot, setGeometry3DSnapshot] = useState(null);
 
   // ── CÁLCULOS ──
   // La orientación define qué cantidad queda sobre el ancho de bobina.
@@ -154,6 +156,22 @@ export default function App() {
   const deleteCfg = (i) => {
     const nc = configs.filter((_, j) => j !== i);
     setConfigs(nc);
+  };
+
+  const updateGeometry3D = () => {
+    if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt) return;
+    setGeometry3DSnapshot({
+      ladoA,
+      ladoB,
+      dia,
+      alt,
+      altCil,
+      tapa,
+      canales,
+      orientacion,
+      tipoFilm,
+    });
+    setGeometry3DVersion((version) => version + 1);
   };
 
   // ── SVG PLAN VIEW ──
@@ -453,14 +471,14 @@ export default function App() {
                 </div>
                 <svg
                   width="100%"
-                  style={{ maxHeight: '340px', display: 'block' }}
+                  style={{ maxHeight: '520px', minHeight: '420px', display: 'block' }}
                   viewBox={`${-ML} ${-MT} ${corte + ML + MR} ${bobTotal + MT + MB}`}
                   preserveAspectRatio="xMidYMid meet"
                 >
                   <defs>
                     {[['mD','#1e293b'],['mB','#2563eb'],['mG','#059669'],['mR','#E61C24']].map(([id, fill]) => (
                       <marker key={id} id={id} viewBox="0 0 10 10" refX="9" refY="5"
-                        markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                        markerWidth="8" markerHeight="8" orient="auto-start-reverse">
                         <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill={fill} />
                       </marker>
                     ))}
@@ -476,7 +494,7 @@ export default function App() {
                     <line x1={0} y1={canal} x2={corte} y2={canal}
                       stroke="#2563eb" strokeWidth="1.5" strokeDasharray="8,5" />
                     <text x={corte * 0.62} y={canal - 5}
-                      fill="#2563eb" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                      fill="#2563eb" fontSize="15" fontFamily="monospace" fontWeight="bold"
                       letterSpacing="1" textAnchor="middle">CORTE LONGITUDINAL</text>
                   </>}
 
@@ -498,14 +516,14 @@ export default function App() {
 
                   <line x1={0}     y1={-MT + 5} x2={0}     y2={bobTotal + 16} stroke="#E61C24" strokeWidth="2.5" />
                   <line x1={corte} y1={-MT + 5} x2={corte} y2={bobTotal + 16} stroke="#E61C24" strokeWidth="2" strokeDasharray="7,5" />
-                  <text x={-8} y={bobTotal * 0.6} fill="#E61C24" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                  <text x={-8} y={bobTotal * 0.6} fill="#E61C24" fontSize="15" fontFamily="monospace" fontWeight="bold"
                     textAnchor="middle" transform={`rotate(-90, -8, ${bobTotal * 0.6})`}>SCHNITT ①</text>
-                  <text x={corte + 8} y={bobTotal * 0.6} fill="#E61C24" fontSize="9" fontFamily="monospace" fontWeight="bold"
+                  <text x={corte + 8} y={bobTotal * 0.6} fill="#E61C24" fontSize="15" fontFamily="monospace" fontWeight="bold"
                     textAnchor="middle" transform={`rotate(-90, ${corte + 8}, ${bobTotal * 0.6})`}>SCHNITT ②</text>
 
                   <line x1={corte * 0.12} y1={-32} x2={corte * 0.88} y2={-32}
                     stroke="#475569" strokeWidth="1.5" markerEnd="url(#mD)" />
-                  <text x={corte / 2} y={-37} fill="#475569" fontSize="9" textAnchor="middle"
+                  <text x={corte / 2} y={-37} fill="#475569" fontSize="15" textAnchor="middle"
                     fontFamily="monospace" letterSpacing="1.5">LAUFRICHTUNG / SENTIDO DE MARCHA</text>
 
                   {/* Left dimension lines */}
@@ -518,39 +536,39 @@ export default function App() {
                   {oreja > 8 && <>
                     <line x1={-74} y1={0} x2={-74} y2={oreja}
                       stroke="#059669" strokeWidth="1.2" markerStart="url(#mG)" markerEnd="url(#mG)" />
-                    <rect x={-93} y={oreja/2-8} width={36} height={16} fill="white" />
-                    <text x={-75} y={oreja/2+4} fill="#059669" fontSize="11" fontFamily="monospace"
+                    <rect x={-93} y={oreja/2-8} width={58} height={24} fill="white" />
+                    <text x={-75} y={oreja/2+4} fill="#059669" fontSize="16" fontFamily="monospace"
                       fontWeight="bold" textAnchor="middle">{oreja.toFixed(1)}</text>
                   </>}
 
                   <line x1={-74} y1={oreja} x2={-74} y2={oreja+packT}
                     stroke="#111" strokeWidth="1.2" markerStart="url(#mD)" markerEnd="url(#mD)" />
-                  <rect x={-93} y={oreja+packT/2-8} width={36} height={16} fill="white" />
-                  <text x={-75} y={oreja+packT/2+4} fill="#111" fontSize="11" fontFamily="monospace"
+                  <rect x={-93} y={oreja+packT/2-8} width={58} height={24} fill="white" />
+                  <text x={-75} y={oreja+packT/2+4} fill="#111" fontSize="16" fontFamily="monospace"
                     fontWeight="bold" textAnchor="middle">{packT.toFixed(0)}</text>
 
                   {oreja > 8 && <>
                     <line x1={-74} y1={oreja+packT} x2={-74} y2={canal}
                       stroke="#059669" strokeWidth="1.2" markerStart="url(#mG)" markerEnd="url(#mG)" />
-                    <rect x={-93} y={oreja+packT+oreja/2-8} width={36} height={16} fill="white" />
-                    <text x={-75} y={oreja+packT+oreja/2+4} fill="#059669" fontSize="11" fontFamily="monospace"
+                    <rect x={-93} y={oreja+packT+oreja/2-8} width={58} height={24} fill="white" />
+                    <text x={-75} y={oreja+packT+oreja/2+4} fill="#059669" fontSize="16" fontFamily="monospace"
                       fontWeight="bold" textAnchor="middle">{oreja.toFixed(1)}</text>
                   </>}
 
                   <line x1={-22} y1={0} x2={-22} y2={canal}
                     stroke="#2563eb" strokeWidth="2" markerStart="url(#mB)" markerEnd="url(#mB)" />
-                  <rect x={-46} y={canal/2-10} width={48} height={20} fill="white" stroke="#2563eb" strokeWidth="0.8" />
-                  <text x={-22} y={canal/2+5} fill="#2563eb" fontSize="12" fontFamily="monospace"
+                  <rect x={-46} y={canal/2-10} width={68} height={28} fill="white" stroke="#2563eb" strokeWidth="0.8" />
+                  <text x={-22} y={canal/2+5} fill="#2563eb" fontSize="17" fontFamily="monospace"
                     fontWeight="bold" textAnchor="middle">{canal.toFixed(1)}</text>
 
                   {/* Right: total bobina */}
                   <line x1={corte+MR-10} y1={0} x2={corte+MR-10} y2={bobTotal}
                     stroke="#2563eb" strokeWidth="2.5" markerStart="url(#mB)" markerEnd="url(#mB)" />
-                  <rect x={corte+MR-60} y={bobTotal/2-13} width={63} height={26}
+                  <rect x={corte+MR-60} y={bobTotal/2-13} width={78} height={34}
                     fill="white" stroke="#2563eb" strokeWidth="1.5" />
-                  <text x={corte+MR-29} y={bobTotal/2+1} fill="#2563eb" fontSize="11"
+                  <text x={corte+MR-29} y={bobTotal/2+1} fill="#2563eb" fontSize="16"
                     fontFamily="monospace" fontWeight="bold" textAnchor="middle">A</text>
-                  <text x={corte+MR-29} y={bobTotal/2+13} fill="#2563eb" fontSize="10"
+                  <text x={corte+MR-29} y={bobTotal/2+13} fill="#2563eb" fontSize="15"
                     fontFamily="monospace" textAnchor="middle">{bobTotal.toFixed(0)}</text>
 
                   {/* Bottom: S */}
@@ -558,9 +576,9 @@ export default function App() {
                   <line x1={corte} y1={bobTotal+2} x2={corte} y2={bobTotal+MB-4} stroke="#E61C24" strokeWidth="0.7" strokeDasharray="3,3" />
                   <line x1={0} y1={bobTotal+MB-8} x2={corte} y2={bobTotal+MB-8}
                     stroke="#E61C24" strokeWidth="2" markerStart="url(#mR)" markerEnd="url(#mR)" />
-                  <rect x={corte/2-65} y={bobTotal+MB-20} width={130} height={20}
+                  <rect x={corte/2-90} y={bobTotal+MB-20} width={180} height={30}
                     fill="white" stroke="#E61C24" strokeWidth="1" />
-                  <text x={corte/2} y={bobTotal+MB-7} fill="#E61C24" fontSize="12"
+                  <text x={corte/2} y={bobTotal+MB-7} fill="#E61C24" fontSize="17"
                     fontFamily="monospace" fontWeight="bold" textAnchor="middle">
                     S = {corte.toFixed(1)} mm
                   </text>
@@ -574,6 +592,17 @@ export default function App() {
                 <div>
                   <div className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-[3px] mb-2">
                     Mapeo del diseño
+                  </div>
+                  <div className="mapping-explanation">
+                    <strong>¿Cómo se calcula?</strong>
+                    <p>Los puntos A-F son posiciones acumuladas sobre el largo de corte.</p>
+                    <ul>
+                      <li><b>A-B:</b> cuerpo recto.</li>
+                      <li><b>B-C:</b> hombro inclinado.</li>
+                      <li><b>C-D:</b> parte superior.</li>
+                      <li><b>D-E:</b> hombro inclinado.</li>
+                      <li><b>E-F:</b> cuerpo recto.</li>
+                    </ul>
                   </div>
                   <table className="w-full text-sm font-mono border-collapse"
                          style={{ border: '1.5px solid #111' }}>
@@ -706,6 +735,22 @@ export default function App() {
                 </div>
 
               </div>{/* end bottom row */}
+
+              <section className="preview-3d-panel no-print">
+                <div>
+                  <span className="preview-3d-kicker">Próxima implementación</span>
+                  <h3>Modelo 3D del pack con film</h3>
+                  <p>El modelo 3D no cambiará mientras editás medidas. Solo se reconstruirá al presionar el botón, evitando estados incompletos o geometrías inválidas.</p>
+                  {geometry3DSnapshot && (
+                    <small>
+                      Geometría preparada v{geometry3DVersion}: {geometry3DSnapshot.ladoA} × {geometry3DSnapshot.ladoB}, {geometry3DSnapshot.canales} canal(es), orientación {geometry3DSnapshot.orientacion === 'normal' ? 'lado B sobre bobina' : 'lado A sobre bobina'}.
+                    </small>
+                  )}
+                </div>
+                <button type="button" onClick={updateGeometry3D} disabled={warnings.length > 0}>
+                  Actualizar geometría 3D
+                </button>
+              </section>
             </div>{/* end right column */}
           </div>{/* end body grid */}
 
