@@ -47,11 +47,12 @@ function Toggle({ value, onChange, options }) {
 // ─── VALIDATION ────────────────────────────────────────────────────────────────
 function validate(f) {
   const warns = [];
-  if (f.altCil > f.alt)       warns.push(`Alt. hasta hombro (${f.altCil}) > alt. total (${f.alt})`);
-  if (f.tapa >= f.dia)        warns.push(`Ø tapa (${f.tapa}) ≥ Ø botella (${f.dia})`);
-  if (f.solape < 20)          warns.push('Solape < 20 mm — riesgo de apertura');
-  if (f.ladoA < 1 || f.ladoB < 1) warns.push('Disposición mínima: 1×1');
-  if (f.micron < 30)          warns.push('Espesor < 30 µm — fuera de rango habitual');
+  if (f.altCil > f.alt) warns.push(`La altura del cuerpo recto (${f.altCil}) supera la altura total (${f.alt})`);
+  if (f.tapa >= f.dia) warns.push(`El diámetro de tapa (${f.tapa}) debe ser menor al diámetro de botella (${f.dia})`);
+  if (f.ladoA < 1 || f.ladoB < 1) warns.push('La disposición mínima es 1 × 1');
+  if (f.micron < 30) warns.push('El espesor es menor a 30 µm');
+  if (!f.entraEnCanal) warns.push(`El paquete necesita ${f.ladoLargo.toFixed(1)} mm por canal, pero solo hay ${f.canal.toFixed(1)} mm disponibles`);
+  if (f.modoCorte === 'manual' && f.diferenciaCorte < 0) warns.push(`El largo manual es ${Math.abs(f.diferenciaCorte).toFixed(1)} mm menor que el perfil geométrico`);
   return warns;
 }
 
@@ -63,12 +64,13 @@ export default function App() {
   const [ladoB,    setLadoB]    = useState(4);      // lado LARGO (vertical, ancho bobina)
   const [dia,      setDia]      = useState(70.5);   // Ø botella cuerpo (mm)
   const [alt,      setAlt]      = useState(210);    // altura total botella (mm)
-  const [altCil,   setAltCil]   = useState(127.19); // altura hasta el hombro (mm)
+  const [altCil,   setAltCil]   = useState(105); // altura hasta el hombro (mm)
   const [tapa,     setTapa]     = useState(26.2);   // Ø tapa superior (mm)
   const [micron,   setMicron]   = useState(50);     // espesor film (µm)
   const [canales,  setCanales]  = useState(1);      // canales del horno
   const [folienbreite, setFolienbreite] = useState(415);  // ancho de bobina (mm)
-  const [rapport,      setRapport]      = useState(880);  // largo rapport (mm)
+  const [rapport,      setRapport]      = useState(880);  // largo de corte manual (mm)
+  const [modoCorte, setModoCorte] = useState('auto');
   const [tipoFilm, setTipoFilm] = useState('cristal');
   const [producto, setProducto] = useState('BNQ 500 ×12');
   const [cliente,  setCliente]  = useState('');
@@ -79,35 +81,46 @@ export default function App() {
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
 
-  // ── CALCULATED (todos outputs) ──
-  const ladoLargo  = ladoB * dia;
-  const ladoTop    = ladoA * dia;
-  const canal      = folienbreite / canales;
-  const oreja      = Math.max(0, (canal - ladoLargo) / 2);
-  const anchoTop   = (ladoA - 1) * dia + tapa;
-  const wT         = (dia - tapa) / 2;
-  const hT         = Math.max(0, alt - altCil);
-  const lT         = Math.sqrt(hT * hT + wT * wT);
-  const perimetro  = ladoLargo + 2 * altCil + 2 * lT + anchoTop;
-  const solape     = Math.max(0, rapport - perimetro);
-  const solapeLado = solape / 2;
+  // ── CÁLCULOS ──
+  const ladoLargo = ladoB * dia;
+  const ladoTop = ladoA * dia;
+  const canal = folienbreite / canales;
+  const margenLateralBruto = (canal - ladoLargo) / 2;
+  const entraEnCanal = margenLateralBruto >= 0;
+  const oreja = Math.max(0, margenLateralBruto);
+  const deficitCanal = Math.max(0, ladoLargo - canal);
+  const anchoBobinaMinimo = ladoLargo * canales;
 
-  // Cotas A–F (el solape se distribuye desde el centro hacia los bordes)
+  const anchoTop = (ladoA - 1) * dia + tapa;
+  const desplazamientoHombro = Math.max(0, (dia - tapa) / 2);
+  const alturaHombro = Math.max(0, alt - altCil);
+  const longitudHombro = Math.sqrt(alturaHombro ** 2 + desplazamientoHombro ** 2);
+  const perimetro = ladoLargo + (2 * altCil) + (2 * longitudHombro) + anchoTop;
+
+  // Las fichas técnicas redondean el recorrido geométrico al siguiente múltiplo de 10 mm.
+  const largoCorteCalculado = Math.ceil(perimetro / 10) * 10;
+  const corte = modoCorte === 'auto' ? largoCorteCalculado : rapport;
+  const diferenciaCorte = corte - perimetro;
+  const ajustePorExtremo = diferenciaCorte / 2;
+
+  // Puntos A-F medidos desde el inicio del corte.
   const medioFondo = ladoLargo / 2;
-  const ptA = medioFondo - solapeLado;
+  const ptA = medioFondo;
   const ptB = ptA + altCil;
-  const ptC = ptB + lT;
+  const ptC = ptB + longitudHombro;
   const ptD = ptC + anchoTop;
-  const ptE = ptD + lT;
+  const ptE = ptD + longitudHombro;
   const ptF = ptE + altCil;
   const pts = { A: ptA, B: ptB, C: ptC, D: ptD, E: ptE, F: ptF };
 
-  const packT      = ladoLargo;
-  const packL      = ladoTop;
-  const bobTotal   = folienbreite;
-  const corte      = rapport;
+  const packT = ladoLargo;
+  const packL = ladoTop;
+  const bobTotal = folienbreite;
 
-  const warnings   = validate({ altCil, alt, tapa, dia, solape, ladoA, ladoB, micron });
+  const warnings = validate({
+    altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal,
+    ladoLargo, canal, modoCorte, diferenciaCorte,
+  });
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -118,6 +131,7 @@ export default function App() {
     setFolienbreite(p.folienbreite ?? p.bobinaM ?? p.bobina ?? 415);
     setRapport(p.rapport ?? p.pasoArte ?? p.paso ?? 880);
     setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
+    setModoCorte(p.modoCorte ?? 'auto');
   };
 
   const saveConfig = () => {
@@ -125,7 +139,7 @@ export default function App() {
     const c = {
       n: cfgName, t: new Date().toLocaleDateString('es-AR'),
       ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
-      folienbreite, rapport, tipoFilm,
+      folienbreite, rapport, tipoFilm, modoCorte,
     };
     const nc = [...configs, c];
     setConfigs(nc);
@@ -142,10 +156,8 @@ export default function App() {
   const packXStart = (corte - ladoTop) / 2;
   const today = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-  const solapePathStart = solapeLado; // alias para SVG
 
   // Perfil lateral: A y F en los bordes del pack (interno), S/SS en el centro del fondo
-  // El solape es el tramo extra que va FUERA de A y F (hacia el centro, por debajo)
   const sideFilmParts = [
     `M ${ladoTop / 2} ${alt}`,          // S/SS: centro del fondo
     `L 0 ${alt}`,                        // borde izquierdo del pack (= punto A)
@@ -162,9 +174,6 @@ export default function App() {
   sideFilmParts.push(`L ${ladoTop / 2} ${alt}`);         // vuelve al S/SS
   const sideFilmPath = sideFilmParts.join(' ');
 
-  // Tramos de solape (se dibujan separados, punteados, desde A y F hacia el centro)
-  const solapePathL = `M ${ladoTop/2} ${alt} L ${solapeLado} ${alt}`;
-  const solapePathR = `M ${ladoTop - solapeLado} ${alt} L ${ladoTop/2} ${alt}`;
 
   const sidePoints = [
     ['A', 0,                                    alt,          -1],
@@ -290,10 +299,10 @@ export default function App() {
                 <SectionHeader num="01" label="Disposición" />
                 <div className="p-3 space-y-2.5">
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Botellas en horizontal">
+                    <Field label="Botellas en dirección del corte">
                       <input type="number" value={ladoA} onChange={e => setLadoA(+e.target.value)} className={inp} />
                     </Field>
-                    <Field label="Botellas en vertical">
+                    <Field label="Botellas sobre el ancho de bobina">
                       <input type="number" value={ladoB} onChange={e => setLadoB(+e.target.value)} className={inp} />
                     </Field>
                   </div>
@@ -307,7 +316,7 @@ export default function App() {
                     <Field label="Altura total (mm)">
                       <input type="number" step="0.1" value={alt} onChange={e => setAlt(+e.target.value)} className={inp} />
                     </Field>
-                    <Field label="Altura hasta el hombro (mm)">
+                    <Field label="Altura del cuerpo recto (mm)">
                       <input type="number" step="0.1" value={altCil}
                         onChange={e => setAltCil(+e.target.value)}
                         className={altCil > alt ? `${inp} border-red-500 bg-red-50` : inp} />
@@ -323,12 +332,27 @@ export default function App() {
               <div style={{ borderBottom: '1px solid #e5e5e5' }}>
                 <SectionHeader num="02" label="Datos de Bobina" />
                 <div className="p-3 space-y-2.5">
-                  <Field label="Ancho de bobina (mm)">
+                  <Field label="Ancho total de bobina (mm)">
                     <input type="number" step="0.5" value={folienbreite} onChange={e => setFolienbreite(+e.target.value)} className={inpAmber} />
                   </Field>
-                  <Field label="Largo de repetición (mm)">
-                    <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
+                  <Field label="Cálculo del largo de corte">
+                    <Toggle
+                      value={modoCorte}
+                      onChange={setModoCorte}
+                      options={[{ val:'auto', label:'AUTOMÁTICO' }, { val:'manual', label:'MANUAL' }]}
+                    />
                   </Field>
+                  {modoCorte === 'manual' && (
+                    <Field label="Largo de corte manual (mm)">
+                      <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
+                    </Field>
+                  )}
+                  {modoCorte === 'auto' && (
+                    <div className="calculated-hint">
+                      Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong>
+                      <span>Perfil {perimetro.toFixed(1)} mm, redondeado al próximo múltiplo de 10.</span>
+                    </div>
+                  )}
                   <Field label="Horno">
                     <select value={canales} onChange={e => setCanales(+e.target.value)} className={inp}>
                       <option value={1}>Monocanal</option>
@@ -361,28 +385,28 @@ export default function App() {
               <div className="results-grid">
                 {[
                   {
-                    label: 'FOLIENBREITE (A)',
+                    label: 'ANCHO DE BOBINA',
                     value: folienbreite.toFixed(1),
                     sub:   canales > 1 ? `${canales} canales × ${canal.toFixed(1)} mm` : 'Monocanal',
                     accent: true,
                   },
                   {
-                    label: 'LARGO DE REPETICIÓN',
-                    value: rapport.toFixed(1),
-                    sub:   `Perímetro pack: ${perimetro.toFixed(1)} mm`,
+                    label: 'LARGO DE CORTE',
+                    value: corte.toFixed(1),
+                    sub:   `${modoCorte === 'auto' ? 'Automático' : 'Manual'} · Perfil: ${perimetro.toFixed(1)} mm`,
                     accent: false,
                   },
                   {
-                    label: 'OREJAS (c/lado)',
-                    value: oreja.toFixed(1),
-                    sub:   'Repetición menos lado largo ÷ 2',
+                    label: entraEnCanal ? 'MARGEN POR LADO' : 'DÉFICIT POR CANAL',
+                    value: (entraEnCanal ? oreja : deficitCanal).toFixed(1),
+                    sub:   'Espacio libre por lado',
                     accent: false,
                     green: true,
                   },
                   {
-                    label: 'SOLAPE S/SS',
-                    value: solape.toFixed(1),
-                    sub:   `${solapeLado.toFixed(1)} mm c/lado`,
+                    label: 'AJUSTE DE CORTE',
+                    value: diferenciaCorte.toFixed(1),
+                    sub:   `${ajustePorExtremo.toFixed(1)} mm por extremo`,
                     accent: false,
                     blue: true,
                   },
@@ -396,6 +420,15 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className={`channel-status ${entraEnCanal ? 'channel-status-ok' : 'channel-status-error'}`}>
+                <strong>{entraEnCanal ? 'Configuración compatible' : 'Configuración incompatible'}</strong>
+                <span>
+                  {entraEnCanal
+                    ? `${canal.toFixed(1)} mm disponibles por canal y ${oreja.toFixed(1)} mm libres por lado.`
+                    : `${canal.toFixed(1)} mm disponibles por canal. Se requieren al menos ${anchoBobinaMinimo.toFixed(1)} mm de bobina total.`}
+                </span>
               </div>
 
               {/* ── PLAN VIEW SVG ── */}
@@ -435,10 +468,10 @@ export default function App() {
                       stroke="#2563eb" strokeWidth="1.5" strokeDasharray="8,5" />
                     <text x={corte * 0.62} y={canal - 5}
                       fill="#2563eb" fontSize="9" fontFamily="monospace" fontWeight="bold"
-                      letterSpacing="1" textAnchor="middle">FOLIENSCHNITT / CORTE LONG.</text>
+                      letterSpacing="1" textAnchor="middle">CORTE LONGITUDINAL</text>
                   </>}
 
-                  {Array.from({ length: canales }).map((_, ci) => (
+                  {entraEnCanal && Array.from({ length: canales }).map((_, ci) => (
                     <g key={ci}>
                       <rect x={packXStart} y={ci * canal + oreja} width={ladoTop} height={ladoLargo}
                         fill="none" stroke="#94a3b8" strokeWidth="0.8" strokeDasharray="5,3" />
@@ -557,8 +590,8 @@ export default function App() {
                   <div className="text-[9px] font-mono text-gray-400 mt-1">
                     Perímetro pack: {perimetro.toFixed(2)} mm
                   </div>
-                  <div className={`text-[9px] font-mono mt-0.5 font-bold ${solape > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                    Solape S/SS: {solape.toFixed(2)} mm ({solapeLado.toFixed(2)} mm c/lado)
+                  <div className="text-[9px] font-mono mt-0.5 font-bold text-blue-600">
+                    Ajuste de corte: {diferenciaCorte.toFixed(2)} mm
                   </div>
                 </div>
 
@@ -581,9 +614,7 @@ export default function App() {
                       ))}
                       {/* film principal */}
                       <path d={sideFilmPath} fill="none" stroke="#E61C24" strokeWidth="2.5" strokeLinejoin="round" />
-                      {/* solape: tramos punteados desde A y F hacia S/SS */}
-                      <path d={solapePathL} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
-                      <path d={solapePathR} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
+
                       {/* puntos A–F */}
                       {sidePoints.map(([l, cx, cy, side]) => (
                         <g key={l}>
