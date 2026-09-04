@@ -1,188 +1,225 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-function createBottle(geometry, material) {
-  const bottle = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.42, 0.42, 1.05, 32),
-    material,
-  );
-  body.position.y = 0.58;
-  bottle.add(body);
-
-  const shoulder = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.42, 0.22, 32),
-    material,
-  );
-  shoulder.position.y = 1.2;
-  bottle.add(shoulder);
-
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.18, 0.18, 0.2, 32),
-    material,
-  );
-  neck.position.y = 1.41;
-  bottle.add(neck);
-
-  const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.2, 0.2, 0.14, 32),
-    new THREE.MeshStandardMaterial({ color: '#d8dee8', roughness: 0.38, metalness: 0.18 }),
-  );
-  cap.position.y = 1.58;
-  bottle.add(cap);
-
-  geometry.push(...bottle.children.map((part) => part.geometry));
-  return bottle;
+function disposeObject(object) {
+  object.traverse((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => material.dispose());
+    }
+  });
 }
 
-export default function Pack3D({ geometry, resetToken }) {
+export default function Pack3D({ geometry, resetToken = 0 }) {
   const mountRef = useRef(null);
-  const cameraState = useRef({ yaw: 0.62, pitch: 0.34, distance: 5.8 });
+  const sceneRef = useRef(null);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount || !geometry) return undefined;
 
+    const width = Math.max(mount.clientWidth, 320);
+    const height = Math.max(mount.clientHeight, 420);
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#f8fafc');
-    scene.fog = new THREE.Fog('#f8fafc', 7, 14);
+    scene.background = new THREE.Color('#eef2f7');
 
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    mount.appendChild(renderer.domElement);
+    mount.replaceChildren(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight('#ffffff', '#cbd5e1', 2.2));
-    const keyLight = new THREE.DirectionalLight('#ffffff', 2.5);
-    keyLight.position.set(3, 5, 4);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 4;
+    controls.maxDistance = 22;
+    controls.maxPolarAngle = Math.PI * 0.48;
+    controls.target.set(0, 1.2, 0);
+
+    const resetCamera = () => {
+      camera.position.set(6.8, 5.4, 7.8);
+      controls.target.set(0, 1.1, 0);
+      controls.update();
+    };
+    resetCamera();
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a94a6, 2.1));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
+    keyLight.position.set(5, 9, 6);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
     scene.add(keyLight);
-
-    const resources = [];
-    const pack = new THREE.Group();
-    const filmMaterial = new THREE.MeshPhysicalMaterial({
-      color: geometry.tipoFilm === 'arte' ? '#f6b8bb' : '#e8eef5',
-      transparent: true,
-      opacity: 0.28,
-      roughness: 0.2,
-      transmission: 0.25,
-      side: THREE.DoubleSide,
-    });
-    const bottleMaterial = new THREE.MeshStandardMaterial({
-      color: geometry.tipoFilm === 'arte' ? '#f28b91' : '#dbeafe',
-      transparent: true,
-      opacity: 0.88,
-      roughness: 0.28,
-    });
-    resources.push(filmMaterial, bottleMaterial);
-
-    const across = Math.max(1, Math.min(geometry.ladoA, 8));
-    const deep = Math.max(1, Math.min(geometry.ladoB, 8));
-    const spacing = 0.9;
-    const width = (across - 1) * spacing + 0.86;
-    const depth = (deep - 1) * spacing + 0.86;
-    const film = new THREE.Mesh(
-      new THREE.BoxGeometry(width + 0.22, 1.86, depth + 0.22),
-      filmMaterial,
-    );
-    film.position.y = 0.86;
-    pack.add(film);
-    resources.push(film.geometry);
-
-    for (let row = 0; row < deep; row += 1) {
-      for (let column = 0; column < across; column += 1) {
-        const bottle = createBottle(resources, bottleMaterial);
-        bottle.position.set(
-          (column - (across - 1) / 2) * spacing,
-          0,
-          (row - (deep - 1) / 2) * spacing,
-        );
-        pack.add(bottle);
-      }
-    }
+    const fillLight = new THREE.DirectionalLight(0xffd5d7, 1.2);
+    fillLight.position.set(-5, 3, -4);
+    scene.add(fillLight);
 
     const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(3.4, 64),
-      new THREE.ShadowMaterial({ color: '#64748b', opacity: 0.16 }),
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshStandardMaterial({ color: 0xdde3eb, roughness: 0.88, metalness: 0 })
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.02;
+    floor.receiveShadow = true;
     scene.add(floor);
-    resources.push(floor.geometry, floor.material);
-    scene.add(pack);
 
-    const state = cameraState.current;
-    const updateCamera = () => {
-      camera.position.set(
-        Math.sin(state.yaw) * Math.cos(state.pitch) * state.distance,
-        Math.sin(state.pitch) * state.distance + 0.8,
-        Math.cos(state.yaw) * Math.cos(state.pitch) * state.distance,
-      );
-      camera.lookAt(0, 0.82, 0);
-    };
-    updateCamera();
+    const packGroup = new THREE.Group();
+    scene.add(packGroup);
 
-    let dragging = false;
-    let lastX = 0;
-    let lastY = 0;
-    const onPointerDown = (event) => {
-      dragging = true;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      renderer.domElement.setPointerCapture(event.pointerId);
-    };
-    const onPointerMove = (event) => {
-      if (!dragging) return;
-      state.yaw -= (event.clientX - lastX) * 0.012;
-      state.pitch = THREE.MathUtils.clamp(state.pitch + (event.clientY - lastY) * 0.01, -0.15, 1.15);
-      lastX = event.clientX;
-      lastY = event.clientY;
-      updateCamera();
-    };
-    const onPointerUp = () => { dragging = false; };
-    const onWheel = (event) => {
-      event.preventDefault();
-      state.distance = THREE.MathUtils.clamp(state.distance + event.deltaY * 0.004, 3.2, 9);
-      updateCamera();
-    };
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('pointerup', onPointerUp);
-    renderer.domElement.addEventListener('pointercancel', onPointerUp);
-    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+    const countX = geometry.orientacion === 'normal' ? geometry.ladoA : geometry.ladoB;
+    const countZ = geometry.orientacion === 'normal' ? geometry.ladoB : geometry.ladoA;
+    const diameterScale = 0.78;
+    const bottleHeight = 3.1;
+    const bodyHeightRatio = Math.min(Math.max(geometry.altCil / geometry.alt, 0.25), 0.88);
+    const bodyHeight = bottleHeight * bodyHeightRatio;
+    const shoulderHeight = Math.max(0.42, bottleHeight - bodyHeight - 0.38);
+    const bodyRadius = diameterScale / 2;
+    const neckRadius = Math.max(0.09, bodyRadius * Math.min(geometry.tapa / geometry.dia, 0.7));
+    const spacing = diameterScale * 1.04;
+    const packWidth = (countX - 1) * spacing + diameterScale;
+    const packDepth = (countZ - 1) * spacing + diameterScale;
 
-    const resize = () => {
-      const widthValue = mount.clientWidth || 640;
-      const heightValue = mount.clientHeight || 420;
-      camera.aspect = widthValue / heightValue;
-      camera.updateProjectionMatrix();
-      renderer.setSize(widthValue, heightValue, false);
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(mount);
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xb9d8ee,
+      roughness: 0.18,
+      metalness: 0,
+      transmission: 0.18,
+      transparent: true,
+      opacity: 0.88,
+      thickness: 0.16,
+    });
+    const liquidMaterial = new THREE.MeshStandardMaterial({ color: 0x3b160d, roughness: 0.42 });
+    const capMaterial = new THREE.MeshStandardMaterial({ color: 0xe31b23, roughness: 0.48 });
 
-    let frame;
-    const animate = () => {
-      frame = requestAnimationFrame(animate);
-      pack.rotation.y += 0.002;
+    for (let xIndex = 0; xIndex < countX; xIndex += 1) {
+      for (let zIndex = 0; zIndex < countZ; zIndex += 1) {
+        const bottle = new THREE.Group();
+        const x = xIndex * spacing - ((countX - 1) * spacing) / 2;
+        const z = zIndex * spacing - ((countZ - 1) * spacing) / 2;
+        bottle.position.set(x, 0, z);
+
+        const liquid = new THREE.Mesh(
+          new THREE.CylinderGeometry(bodyRadius * 0.82, bodyRadius * 0.86, bodyHeight * 0.9, 28),
+          liquidMaterial
+        );
+        liquid.position.y = bodyHeight * 0.46;
+        bottle.add(liquid);
+
+        const body = new THREE.Mesh(
+          new THREE.CylinderGeometry(bodyRadius, bodyRadius, bodyHeight, 32),
+          glassMaterial
+        );
+        body.position.y = bodyHeight / 2;
+        body.castShadow = true;
+        bottle.add(body);
+
+        const shoulder = new THREE.Mesh(
+          new THREE.CylinderGeometry(neckRadius * 1.25, bodyRadius, shoulderHeight, 32),
+          glassMaterial
+        );
+        shoulder.position.y = bodyHeight + shoulderHeight / 2;
+        shoulder.castShadow = true;
+        bottle.add(shoulder);
+
+        const neck = new THREE.Mesh(
+          new THREE.CylinderGeometry(neckRadius, neckRadius, 0.34, 24),
+          glassMaterial
+        );
+        neck.position.y = bodyHeight + shoulderHeight + 0.17;
+        bottle.add(neck);
+
+        const cap = new THREE.Mesh(
+          new THREE.CylinderGeometry(neckRadius * 1.12, neckRadius * 1.12, 0.16, 24),
+          capMaterial
+        );
+        cap.position.y = bodyHeight + shoulderHeight + 0.42;
+        cap.castShadow = true;
+        bottle.add(cap);
+        packGroup.add(bottle);
+      }
+    }
+
+    const filmColor = geometry.tipoFilm === 'arte' ? 0xef1f25 : 0xdceeff;
+    const filmMaterial = new THREE.MeshPhysicalMaterial({
+      color: filmColor,
+      transparent: true,
+      opacity: geometry.tipoFilm === 'arte' ? 0.23 : 0.17,
+      roughness: 0.14,
+      metalness: 0,
+      transmission: geometry.tipoFilm === 'arte' ? 0.05 : 0.72,
+      thickness: 0.08,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const filmHeight = bottleHeight * 0.88;
+    const film = new THREE.Mesh(
+      new THREE.BoxGeometry(packWidth + 0.28, filmHeight, packDepth + 0.28),
+      filmMaterial
+    );
+    film.position.y = filmHeight / 2;
+    film.renderOrder = 2;
+    packGroup.add(film);
+
+    const filmEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(film.geometry),
+      new THREE.LineBasicMaterial({ color: 0xef1f25, transparent: true, opacity: 0.56 })
+    );
+    filmEdges.position.copy(film.position);
+    packGroup.add(filmEdges);
+
+    const filmBand = new THREE.Mesh(
+      new THREE.BoxGeometry(packWidth + 0.3, 0.28, packDepth + 0.3),
+      new THREE.MeshStandardMaterial({
+        color: 0xef1f25,
+        transparent: true,
+        opacity: geometry.tipoFilm === 'arte' ? 0.74 : 0.18,
+        depthWrite: false,
+      })
+    );
+    filmBand.position.y = filmHeight * 0.56;
+    packGroup.add(filmBand);
+
+    const grid = new THREE.GridHelper(16, 16, 0xa8b1c0, 0xd2d8e1);
+    grid.position.y = 0.005;
+    scene.add(grid);
+
+    sceneRef.current = { resetCamera };
+    let frameId;
+    const render = () => {
+      controls.update();
       renderer.render(scene, camera);
+      frameId = requestAnimationFrame(render);
     };
-    animate();
+    render();
+
+    const resizeObserver = new ResizeObserver(() => {
+      const nextWidth = Math.max(mount.clientWidth, 320);
+      const nextHeight = Math.max(mount.clientHeight, 420);
+      camera.aspect = nextWidth / nextHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nextWidth, nextHeight);
+    });
+    resizeObserver.observe(mount);
 
     return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
-      renderer.domElement.removeEventListener('pointermove', onPointerMove);
-      renderer.domElement.removeEventListener('pointerup', onPointerUp);
-      renderer.domElement.removeEventListener('pointercancel', onPointerUp);
-      renderer.domElement.removeEventListener('wheel', onWheel);
-      resources.forEach((resource) => resource.dispose?.());
+      cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+      controls.dispose();
+      disposeObject(scene);
       renderer.dispose();
-      mount.removeChild(renderer.domElement);
+      sceneRef.current = null;
+      mount.replaceChildren();
     };
-  }, [geometry, resetToken]);
+  }, [geometry]);
 
-  return <div ref={mountRef} className="pack-3d-canvas" aria-label="Modelo 3D del pack" />;
+  useEffect(() => {
+    if (resetToken > 0) sceneRef.current?.resetCamera();
+  }, [resetToken]);
+
+  return <div ref={mountRef} className="pack-3d-canvas" aria-label="Visualizador 3D del pack" />;
 }
