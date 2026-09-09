@@ -86,6 +86,7 @@ export default function App() {
   const [geometry3D, setGeometry3D] = useState(null);
   const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
+  const [solape3D, setSolape3D] = useState(10);
 
   // ── CÁLCULOS ──
   // La orientación define qué cantidad queda sobre el ancho de bobina.
@@ -132,7 +133,7 @@ export default function App() {
 
   useEffect(() => {
     setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm]);
+  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D]);
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -166,7 +167,7 @@ export default function App() {
 
   const updateGeometry3D = () => {
     if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt || tapa <= 0 || tapa >= dia) return;
-    setGeometry3D({ ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm });
+    setGeometry3D({ ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, puntos: pts, largoCorte: corte, solape: Math.min(Math.max(solape3D, 0), dia / 2) });
     setGeometry3DDirty(false);
   };
 
@@ -736,6 +737,28 @@ export default function App() {
                       {geometry3D ? 'Actualizar geometría 3D' : 'Generar modelo 3D'}
                     </button>
                   </div>
+                </div>
+
+                <div className="viewer-measure-controls">
+                  <div>
+                    <strong>Cotas del perfil</strong>
+                    <span>A-F se toman directamente del Mapeo del diseño.</span>
+                  </div>
+                  <label>
+                    <span>Solape S/SS</span>
+                    <div>
+                      <input
+                        type="number"
+                        min="0"
+                        max={(dia / 2).toFixed(1)}
+                        step="1"
+                        value={solape3D}
+                        onChange={(event) => setSolape3D(+event.target.value)}
+                      />
+                      <b>mm</b>
+                    </div>
+                    <small>Referencia: 10 mm. Máximo sugerido: {(dia / 2).toFixed(1)} mm.</small>
+                  </label>
                 </div>
 
                 {geometry3DDirty && geometry3D && (
