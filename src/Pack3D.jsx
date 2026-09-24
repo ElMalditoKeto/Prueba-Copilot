@@ -134,64 +134,6 @@ function addProfileAnnotations(group, { lowerWidth, lowerDepth, upperWidth, shou
   group.add(overlap);
 }
 
-
-function createCroppedTexture(imageUrl, crop, invertido, onReady) {
-  const image = new Image();
-  image.onload = () => {
-    const left = Math.max(0, Math.min(45, crop?.izquierda ?? 0)) / 100;
-    const right = Math.max(0, Math.min(45, crop?.derecha ?? 0)) / 100;
-    const top = Math.max(0, Math.min(45, crop?.superior ?? 0)) / 100;
-    const bottom = Math.max(0, Math.min(45, crop?.inferior ?? 0)) / 100;
-    const sourceX = image.width * left;
-    const sourceY = image.height * top;
-    const sourceWidth = image.width * Math.max(0.05, 1 - left - right);
-    const sourceHeight = image.height * Math.max(0.05, 1 - top - bottom);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(512, Math.round(sourceWidth));
-    canvas.height = Math.max(256, Math.round(sourceHeight));
-    const context = canvas.getContext('2d');
-    context.save();
-    if (invertido) {
-      context.translate(canvas.width, 0);
-      context.scale(-1, 1);
-    }
-    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
-    context.restore();
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.anisotropy = 8;
-    texture.needsUpdate = true;
-    onReady(texture);
-  };
-  image.src = imageUrl;
-}
-
-function createArtworkRibbon({ profile, halfDepth, uValues }) {
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-  for (let index = 0; index < profile.length; index += 1) {
-    const point = profile[index];
-    positions.push(point.x, point.y, -halfDepth, point.x, point.y, halfDepth);
-    uvs.push(uValues[index], 0, uValues[index], 1);
-  }
-  for (let index = 0; index < profile.length - 1; index += 1) {
-    const a = index * 2;
-    const b = a + 1;
-    const c = a + 2;
-    const d = a + 3;
-    indices.push(a, c, d, a, d, b);
-  }
-  const result = new THREE.BufferGeometry();
-  result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  result.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  result.setIndex(indices);
-  result.computeVertexNormals();
-  return result;
-}
-
 export default function Pack3D({ geometry, resetToken = 0 }) {
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
@@ -298,9 +240,9 @@ export default function Pack3D({ geometry, resetToken = 0 }) {
     const film = new THREE.Mesh(filmGeometry, new THREE.MeshPhysicalMaterial({
       color: 0x2396df,
       transparent: true,
-      opacity: geometry.tipoFilm === 'arte' && geometry.arte ? 0.08 : 0.28,
+      opacity: geometry.tipoFilm === 'arte' ? 0.34 : 0.28,
       roughness: 0.18,
-      transmission: geometry.tipoFilm === 'arte' && geometry.arte ? 0.05 : 0.48,
+      transmission: geometry.tipoFilm === 'arte' ? 0.12 : 0.48,
       side: THREE.DoubleSide,
       depthWrite: false,
     }));
@@ -309,56 +251,6 @@ export default function Pack3D({ geometry, resetToken = 0 }) {
     const outline = new THREE.LineSegments(new THREE.EdgesGeometry(filmGeometry), new THREE.LineBasicMaterial({ color: 0x0878c4, transparent: true, opacity: 0.82 }));
     outline.renderOrder = 4;
     pack.add(outline);
-
-    if (geometry.tipoFilm === 'arte' && geometry.arte?.imagen) {
-      const cutLength = Math.max(Number(geometry.largoCorte ?? 1), 1);
-      const artLength = Math.max(Number(geometry.arte.largo ?? cutLength), 1);
-      const offset = Number(geometry.arte.offset ?? 0);
-      const pointValues = geometry.puntos ?? {};
-      const cumulative = [
-        0,
-        Number(pointValues.A ?? 0),
-        Number(pointValues.B ?? 0),
-        Number(pointValues.C ?? 0),
-        Number(pointValues.D ?? 0),
-        Number(pointValues.E ?? 0),
-        Number(pointValues.F ?? 0),
-        cutLength,
-      ];
-      const profile = [
-        new THREE.Vector2(0, 0.055),
-        new THREE.Vector2(-lowerWidth / 2, 0.055),
-        new THREE.Vector2(-lowerWidth / 2, shoulderStart),
-        new THREE.Vector2(-upperWidth / 2, totalHeight),
-        new THREE.Vector2(upperWidth / 2, totalHeight),
-        new THREE.Vector2(lowerWidth / 2, shoulderStart),
-        new THREE.Vector2(lowerWidth / 2, 0.055),
-        new THREE.Vector2(0, 0.065),
-      ];
-      const uValues = cumulative.map((value) => (value + offset) / artLength);
-      const artworkGeometry = createArtworkRibbon({
-        profile,
-        halfDepth: lowerDepth / 2 + 0.012,
-        uValues,
-      });
-      createCroppedTexture(
-        geometry.arte.imagen,
-        geometry.arte.recorte,
-        Boolean(geometry.arte.invertido),
-        (texture) => {
-          const artworkMaterial = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            opacity: 0.92,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          });
-          const artwork = new THREE.Mesh(artworkGeometry, artworkMaterial);
-          artwork.renderOrder = 7;
-          pack.add(artwork);
-        }
-      );
-    }
 
     addProfileAnnotations(pack, {
       lowerWidth,

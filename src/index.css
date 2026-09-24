@@ -33,6 +33,7 @@ body {
 .result-value { margin: 16px 0 10px; color: #0e1729; font-family: 'JetBrains Mono', monospace; font-size: 40px; font-weight: 900; line-height: 1; }
 .result-detail { color: #9aa3b2; font-size: 10px; }
 .result-card-primary .result-label,.result-card-primary .result-value,.result-card-primary .result-detail { color: white; }
+.result-card-green .result-value { color: #079560; }
 .result-card-blue .result-value { color: #275bcb; }
 .orientation-help { margin-top: 6px; color: #6b7280; font-size: 9px; line-height: 1.4; }
 .calculated-hint { padding: 12px 14px; border: 1px solid #cfe0ff; border-radius: 14px; background: #f3f7ff; color: #2457b7; font-size: 11px; }
@@ -216,39 +217,160 @@ body {
   .viewer-measure-controls label { grid-template-columns: 1fr 120px; }
 }
 
-/* Configuración del arte impreso */
-.art-config-card {
-  display: grid;
-  gap: 10px;
-  padding: 13px;
-  border: 1px solid #f1b7ba;
-  border-radius: 18px;
-  background: #fff7f7;
+/* Optimizador de bobina basado en dimensiones físicas del arte */
+.optimizer-toggle-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 850;
 }
-.art-config-title { display: flex; flex-direction: column; gap: 3px; }
-.art-config-title strong { color: #a91c22; font-size: 11px; }
-.art-config-title span { color: #8a6570; font-size: 8px; line-height: 1.4; }
-.art-upload-button { display: grid; min-height: 42px; place-items: center; border: 1px dashed #e61c24; border-radius: 14px; background: #fff; color: #c71920; font-size: 10px; font-weight: 850; cursor: pointer; }
-.art-upload-button input { display: none; }
-.art-file-name { overflow: hidden; color: #667085; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.art-dimensions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.art-crop-details { border-top: 1px solid #f3d0d2; padding-top: 9px; }
-.art-crop-details summary { color: #7a4950; font-size: 9px; font-weight: 800; cursor: pointer; }
-.art-crop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
-.art-crop-grid label > span { display: block; margin-bottom: 4px; color: #7b6670; font-size: 8px; }
-.art-crop-grid label > div { display: flex; overflow: hidden; border: 1px solid #ead4d5; border-radius: 10px; background: #fff; }
-.art-crop-grid input { width: 100%; min-width: 0; border: 0; outline: 0; padding: 7px 8px; font-size: 10px; font-weight: 750; }
-.art-crop-grid b { display: grid; min-width: 30px; place-items: center; background: #f8e8e9; color: #8a5960; font-size: 8px; }
-.art-match-status { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; font-size: 8px; }
-.art-match-status strong { font-size: 9px; }
-.art-match-status.ok { border: 1px solid #b9ead5; background: #effbf5; color: #08764e; }
-.art-match-status.warning { border: 1px solid #f7d49b; background: #fff8e7; color: #9a620a; }
-.viewer-art-status { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 22px; border-bottom: 1px solid #e4eaf1; font-size: 9px; }
-.viewer-art-status.ready { background: #effbf5; color: #08764e; }
-.viewer-art-status.missing { background: #fff4f4; color: #bd2026; }
-.viewer-art-status span { text-align: right; }
-@media (max-width: 620px) {
-  .art-dimensions-grid, .art-crop-grid { grid-template-columns: 1fr; }
-  .viewer-art-status { align-items: flex-start; flex-direction: column; }
-  .viewer-art-status span { text-align: left; }
+
+.bobbin-optimizer {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #bfd5fb;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #f8fbff, #edf5ff);
+}
+
+.bobbin-optimizer-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bobbin-optimizer-heading strong {
+  color: #193f7a;
+  font-size: 11px;
+}
+
+.bobbin-optimizer-heading span {
+  color: #7183a0;
+  font-size: 8px;
+}
+
+.bobbin-optimizer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.optimizer-formula {
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: #dceaff;
+  color: #25549a;
+  font-size: 9px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.optimizer-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.optimizer-results > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid #d9e4f3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.optimizer-results span {
+  color: #758197;
+  font-size: 8px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.optimizer-results strong {
+  color: #172033;
+  font-size: 16px;
+}
+
+.optimizer-results small {
+  color: #8793a5;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
+.optimizer-result-primary {
+  border-color: #2563eb !important;
+  background: #2563eb !important;
+}
+
+.optimizer-result-primary span,
+.optimizer-result-primary strong,
+.optimizer-result-primary small {
+  color: #fff;
+}
+
+.optimizer-results .optimizer-ok strong {
+  color: #078556;
+}
+
+.optimizer-results .optimizer-error strong {
+  color: #c12026;
+}
+
+.optimizer-validation {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 8px;
+}
+
+.optimizer-validation strong {
+  font-size: 9px;
+}
+
+.optimizer-validation.ok {
+  border: 1px solid #b9ead5;
+  background: #effbf5;
+  color: #08764e;
+}
+
+.optimizer-validation.error {
+  border: 1px solid #ffc2c2;
+  background: #fff2f2;
+  color: #c61c24;
+}
+
+.optimizer-apply-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 15px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 850;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.optimizer-apply-button:disabled {
+  cursor: not-allowed;
+  background: #aeb8c7;
+  box-shadow: none;
+}
+
+@media (max-width: 480px) {
+  .bobbin-optimizer-grid,
+  .optimizer-results {
+    grid-template-columns: 1fr;
+  }
 }

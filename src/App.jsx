@@ -87,13 +87,11 @@ export default function App() {
   const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
   const [solape3D, setSolape3D] = useState(10);
-  const [arteImagen, setArteImagen] = useState(null);
-  const [arteNombre, setArteNombre] = useState('');
-  const [arteLargo, setArteLargo] = useState(1049);
-  const [arteAncho, setArteAncho] = useState(320);
-  const [arteOffset, setArteOffset] = useState(0);
-  const [arteInvertido, setArteInvertido] = useState(false);
-  const [arteRecorte, setArteRecorte] = useState({ izquierda: 11.4, derecha: 11.4, superior: 11.5, inferior: 12 });
+  const [showBobinaOptimizer, setShowBobinaOptimizer] = useState(false);
+  const [arteFisicoLargo, setArteFisicoLargo] = useState(1049);
+  const [arteFisicoAncho, setArteFisicoAncho] = useState(320);
+  const [separacionCentral, setSeparacionCentral] = useState(5);
+  const [bobinasDisponiblesTexto, setBobinasDisponiblesTexto] = useState('320, 400, 405, 415, 520, 645, 700, 760, 820');
 
   // ── CÁLCULOS ──
   // La orientación define qué cantidad queda sobre el ancho de bobina.
@@ -107,6 +105,23 @@ export default function App() {
   const oreja = Math.max(0, margenBruto);
   const deficitCanal = Math.max(0, anchoPaquete - canal);
   const anchoBobinaMinimo = anchoPaquete * canales;
+
+  // Optimizador independiente basado en las dimensiones físicas del arte.
+  const anchoArtePorCanal = Math.max(0, arteFisicoAncho);
+  const separacionAplicada = canales === 2 ? Math.max(0, separacionCentral) : 0;
+  const bobinaTeoricaArte = (anchoArtePorCanal * canales) + separacionAplicada;
+  const bobinasDisponibles = bobinasDisponiblesTexto
+    .split(/[,;\s]+/)
+    .map((value) => Number(value.replace(',', '.')))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  const bobinaDisponibleRecomendada = bobinasDisponibles.find((value) => value >= bobinaTeoricaArte) ?? null;
+  const bobinaOptima = bobinaDisponibleRecomendada ?? bobinaTeoricaArte;
+  const anchoUtilOptimoPorCanal = (bobinaOptima - separacionAplicada) / canales;
+  const margenOptimoPorLado = (anchoUtilOptimoPorCanal - anchoPaquete) / 2;
+  const arteCompatibleConPack = anchoArtePorCanal >= anchoPaquete;
+  const excedenteBobina = bobinaOptima - bobinaTeoricaArte;
+
 
   const anchoTop = (botellasCorte - 1) * dia + tapa;
   const desplazamientoHombro = Math.max(0, (dia - tapa) / 2);
@@ -140,7 +155,7 @@ export default function App() {
 
   useEffect(() => {
     setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D, arteImagen, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
+  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D]);
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -172,35 +187,16 @@ export default function App() {
     setConfigs(nc);
   };
 
-  const handleArteFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setArteImagen(String(reader.result));
-      setArteNombre(file.name);
-    };
-    reader.readAsDataURL(file);
+  const aplicarBobinaOptima = () => {
+    if (!(bobinaOptima > 0) || !(arteFisicoLargo > 0)) return;
+    setFolienbreite(Number(bobinaOptima.toFixed(1)));
+    setRapport(Number(arteFisicoLargo.toFixed(1)));
+    setModoCorte('manual');
   };
 
   const updateGeometry3D = () => {
     if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt || tapa <= 0 || tapa >= dia) return;
-    setGeometry3D({
-      ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm,
-      puntos: pts,
-      largoCorte: corte,
-      anchoBobina: folienbreite,
-      solape: Math.min(Math.max(solape3D, 0), dia / 2),
-      arte: tipoFilm === 'arte' && arteImagen ? {
-        imagen: arteImagen,
-        nombre: arteNombre,
-        largo: arteLargo,
-        ancho: arteAncho,
-        offset: arteOffset,
-        invertido: arteInvertido,
-        recorte: arteRecorte,
-      } : null,
-    });
+    setGeometry3D({ ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, puntos: pts, largoCorte: corte, solape: Math.min(Math.max(solape3D, 0), dia / 2) });
     setGeometry3DDirty(false);
   };
 
@@ -421,6 +417,88 @@ export default function App() {
                       <option value={2}>Doble Canal</option>
                     </select>
                   </Field>
+
+                  <button
+                    type="button"
+                    className="optimizer-toggle-button"
+                    onClick={() => setShowBobinaOptimizer((value) => !value)}
+                  >
+                    {showBobinaOptimizer ? 'Ocultar cálculo de bobina' : 'Calcular bobina óptima desde el arte'}
+                  </button>
+
+                  {showBobinaOptimizer && (
+                    <div className="bobbin-optimizer">
+                      <div className="bobbin-optimizer-heading">
+                        <strong>Bobina óptima desde dimensiones físicas</strong>
+                        <span>Este cálculo es independiente del visualizador 3D.</span>
+                      </div>
+
+                      <div className="bobbin-optimizer-grid">
+                        <Field label="Largo físico del arte (mm)">
+                          <input type="number" min="1" step="0.5" value={arteFisicoLargo} onChange={e => setArteFisicoLargo(+e.target.value)} className={inp} />
+                        </Field>
+                        <Field label="Ancho físico por canal (mm)">
+                          <input type="number" min="1" step="0.5" value={arteFisicoAncho} onChange={e => setArteFisicoAncho(+e.target.value)} className={inp} />
+                        </Field>
+                      </div>
+
+                      {canales === 2 && (
+                        <Field label="Separación central / corte longitudinal (mm)">
+                          <input type="number" min="0" step="0.5" value={separacionCentral} onChange={e => setSeparacionCentral(+e.target.value)} className={inp} />
+                        </Field>
+                      )}
+
+                      <Field label="Bobinas disponibles (mm, separadas por coma)">
+                        <input
+                          type="text"
+                          value={bobinasDisponiblesTexto}
+                          onChange={e => setBobinasDisponiblesTexto(e.target.value)}
+                          className={inp}
+                          placeholder="320, 400, 415, 645..."
+                        />
+                      </Field>
+
+                      <div className="optimizer-formula">
+                        {canales === 1
+                          ? `Monocanal: ${arteFisicoAncho.toFixed(1)} mm`
+                          : `Doble canal: (${arteFisicoAncho.toFixed(1)} × 2) + ${separacionAplicada.toFixed(1)} = ${bobinaTeoricaArte.toFixed(1)} mm`}
+                      </div>
+
+                      <div className="optimizer-results">
+                        <div className="optimizer-result-primary">
+                          <span>Bobina óptima</span>
+                          <strong>{bobinaOptima.toFixed(1)} mm</strong>
+                          <small>{bobinaDisponibleRecomendada ? 'Menor bobina disponible compatible' : 'Valor teórico, no figura en la lista'}</small>
+                        </div>
+                        <div>
+                          <span>Ancho útil por canal</span>
+                          <strong>{anchoUtilOptimoPorCanal.toFixed(1)} mm</strong>
+                        </div>
+                        <div className={margenOptimoPorLado >= 0 ? 'optimizer-ok' : 'optimizer-error'}>
+                          <span>Margen por lado</span>
+                          <strong>{margenOptimoPorLado.toFixed(1)} mm</strong>
+                        </div>
+                        <div>
+                          <span>Excedente comercial</span>
+                          <strong>{excedenteBobina.toFixed(1)} mm</strong>
+                        </div>
+                      </div>
+
+                      <div className={`optimizer-validation ${arteCompatibleConPack ? 'ok' : 'error'}`}>
+                        <strong>{arteCompatibleConPack ? 'El arte cubre el ancho del pack' : 'El arte es más angosto que el pack'}</strong>
+                        <span>Arte por canal: {anchoArtePorCanal.toFixed(1)} mm · Pack: {anchoPaquete.toFixed(1)} mm</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="optimizer-apply-button"
+                        onClick={aplicarBobinaOptima}
+                        disabled={!arteCompatibleConPack || bobinaOptima <= 0}
+                      >
+                        Aplicar bobina y largo de corte
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -436,76 +514,6 @@ export default function App() {
                   <Field label="Espesor Film (µm)">
                     <input type="number" value={micron} onChange={e => setMicron(+e.target.value)} className={inp} />
                   </Field>
-                  {tipoFilm === 'arte' && (
-                    <div className="art-config-card">
-                      <div className="art-config-title">
-                        <strong>Arte del film</strong>
-                        <span>La imagen se proyecta siguiendo Inicio-A-B-C-D-E-F-Final.</span>
-                      </div>
-
-                      <label className="art-upload-button">
-                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleArteFile} />
-                        <span>{arteImagen ? 'Cambiar imagen' : 'Cargar imagen del arte'}</span>
-                      </label>
-
-                      {arteNombre && <div className="art-file-name">{arteNombre}</div>}
-
-                      <div className="art-dimensions-grid">
-                        <Field label="Largo del arte (mm)">
-                          <input type="number" step="0.5" value={arteLargo} onChange={e => setArteLargo(+e.target.value)} className={inp} />
-                        </Field>
-                        <Field label="Ancho del arte (mm)">
-                          <input type="number" step="0.5" value={arteAncho} onChange={e => setArteAncho(+e.target.value)} className={inp} />
-                        </Field>
-                      </div>
-
-                      <Field label="Desplazamiento horizontal (mm)">
-                        <input type="number" step="1" value={arteOffset} onChange={e => setArteOffset(+e.target.value)} className={inp} />
-                      </Field>
-
-                      <Toggle
-                        value={arteInvertido ? 'si' : 'no'}
-                        onChange={(value) => setArteInvertido(value === 'si')}
-                        options={[{ val:'no', label:'SENTIDO NORMAL' }, { val:'si', label:'INVERTIR ARTE' }]}
-                      />
-
-                      <details className="art-crop-details">
-                        <summary>Ajustar recorte de la imagen</summary>
-                        <div className="art-crop-grid">
-                          {[
-                            ['izquierda', 'Izquierda'],
-                            ['derecha', 'Derecha'],
-                            ['superior', 'Superior'],
-                            ['inferior', 'Inferior'],
-                          ].map(([key, label]) => (
-                            <label key={key}>
-                              <span>{label}</span>
-                              <div>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="45"
-                                  step="0.5"
-                                  value={arteRecorte[key]}
-                                  onChange={(event) => setArteRecorte((current) => ({ ...current, [key]: +event.target.value }))}
-                                />
-                                <b>%</b>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </details>
-
-                      <div className={`art-match-status ${Math.abs(arteLargo - corte) <= 1 ? 'ok' : 'warning'}`}>
-                        <strong>{Math.abs(arteLargo - corte) <= 1 ? 'Largo compatible' : 'Revisar largo del arte'}</strong>
-                        <span>Arte: {arteLargo.toFixed(1)} mm · Corte: {corte.toFixed(1)} mm · Diferencia: {(arteLargo - corte).toFixed(1)} mm</span>
-                      </div>
-                      <div className={`art-match-status ${Math.abs(arteAncho - folienbreite) <= 1 ? 'ok' : 'warning'}`}>
-                        <strong>{Math.abs(arteAncho - folienbreite) <= 1 ? 'Ancho compatible' : 'Revisar ancho del arte'}</strong>
-                        <span>Arte: {arteAncho.toFixed(1)} mm · Bobina: {folienbreite.toFixed(1)} mm · Diferencia: {(arteAncho - folienbreite).toFixed(1)} mm</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -533,6 +541,7 @@ export default function App() {
                     value: (entraEnCanal ? oreja : deficitCanal).toFixed(1),
                     sub: entraEnCanal ? 'Espacio libre por lado' : `Bobina mínima ${anchoBobinaMinimo.toFixed(1)} mm`,
                     accent: false,
+                    green: true,
                   },
                   {
                     label: 'AJUSTE DE CORTE',
@@ -541,8 +550,8 @@ export default function App() {
                     accent: false,
                     blue: true,
                   },
-                ].map(({ label, value, sub, accent, blue }, i) => (
-                  <div key={label} className={`result-card ${accent ? 'result-card-primary' : ''} ${blue ? 'result-card-blue' : ''}`}>
+                ].map(({ label, value, sub, accent, green, blue }, i) => (
+                  <div key={label} className={`result-card ${accent ? 'result-card-primary' : ''} ${green ? 'result-card-green' : ''} ${blue ? 'result-card-blue' : ''}`}>
                     <div className="result-label">{label}</div>
                     <div className="result-value">{value}</div>
                     <div>
@@ -829,7 +838,7 @@ export default function App() {
                   <div>
                     <span className="viewer-3d-kicker">Visualizador interactivo</span>
                     <h3>Pack 3D con film termocontraíble</h3>
-                    <p>Arrastrá para rotar. En modo CON ARTE, la imagen se envuelve siguiendo el perfil A-F y termina en S/SS.</p>
+                    <p>Arrastrá para rotar, usá la rueda para acercar y el botón para aplicar cambios de disposición.</p>
                   </div>
                   <div className="viewer-3d-actions">
                     <button type="button" className="viewer-button-secondary" onClick={() => setReset3DToken((value) => value + 1)} disabled={!geometry3D}>
@@ -841,12 +850,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {tipoFilm === 'arte' && (
-                  <div className={`viewer-art-status ${arteImagen ? 'ready' : 'missing'}`}>
-                    <strong>{arteImagen ? 'Arte cargado' : 'Falta cargar el arte'}</strong>
-                    <span>{arteImagen ? `${arteNombre} · ${arteLargo.toFixed(1)} × ${arteAncho.toFixed(1)} mm` : 'Cargá una imagen en Material > Con arte.'}</span>
-                  </div>
-                )}
                 <div className="viewer-measure-controls">
                   <div>
                     <strong>Cotas del perfil</strong>
