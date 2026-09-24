@@ -134,65 +134,37 @@ function addProfileAnnotations(group, { lowerWidth, lowerDepth, upperWidth, shou
   group.add(overlap);
 }
 
-
-function createCroppedTexture(imageUrl, crop, invertido, onReady) {
-  const image = new Image();
-  image.onload = () => {
-    const left = Math.max(0, Math.min(45, crop?.izquierda ?? 0)) / 100;
-    const right = Math.max(0, Math.min(45, crop?.derecha ?? 0)) / 100;
-    const top = Math.max(0, Math.min(45, crop?.superior ?? 0)) / 100;
-    const bottom = Math.max(0, Math.min(45, crop?.inferior ?? 0)) / 100;
-    const canvas = document.createElement('canvas');
-    const sw = image.width * Math.max(0.05, 1 - left - right);
-    const sh = image.height * Math.max(0.05, 1 - top - bottom);
-    canvas.width = Math.max(512, Math.round(sw));
-    canvas.height = Math.max(256, Math.round(sh));
-    const ctx = canvas.getContext('2d');
-    ctx.save();
-    if (invertido) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(image, image.width * left, image.height * top, sw, sh, 0, 0, canvas.width, canvas.height);
-    ctx.restore();
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.needsUpdate = true;
-    onReady(texture);
-  };
-  image.src = imageUrl;
-}
-
-function createArtworkRibbon(profile, halfDepth, uValues) {
-  const positions = [], uvs = [], indices = [];
-  profile.forEach((point, i) => {
-    positions.push(point.x, point.y, -halfDepth, point.x, point.y, halfDepth);
-    uvs.push(uValues[i], 0, uValues[i], 1);
-  });
-  for (let i = 0; i < profile.length - 1; i += 1) {
-    const a=i*2,b=a+1,c=a+2,d=a+3;
-    indices.push(a,c,d,a,d,b);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
-  g.setIndex(indices); g.computeVertexNormals(); return g;
-}
-
-function addMarginBands(group, { lowerWidth, lowerDepth, totalHeight, artWidth, upperMm, lowerMm, scale }) {
-  const makeBand = (z, widthMm, color) => {
-    const bandDepth = Math.max(widthMm * scale, 0.025);
-    const band = new THREE.Mesh(
-      new THREE.BoxGeometry(lowerWidth + 0.03, totalHeight * 0.98, bandDepth),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, depthWrite: false })
+function addEarMargins(group, { lowerWidth, lowerDepth, totalHeight, marginMm, topMm, bottomMm, scale }) {
+  const margin = Math.max(marginMm * scale, 0);
+  const zFront = lowerDepth / 2;
+  const zBack = -lowerDepth / 2;
+  const openingRadius = Math.max(margin / 2, 0.04);
+  [zFront, zBack].forEach((z, index) => {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(openingRadius, 0.025, 12, 48),
+      new THREE.MeshBasicMaterial({ color: index === 0 ? 0xf59e0b : 0x10b981, transparent: true, opacity: 0.9, depthTest: false })
     );
-    band.position.set(0, totalHeight / 2, z);
-    band.renderOrder = 8;
-    group.add(band);
-  };
-  if (artWidth > 0) {
-    makeBand(-lowerDepth / 2 + Math.max(upperMm * scale,0.025)/2, upperMm, 0xf59e0b);
-    makeBand(lowerDepth / 2 - Math.max(lowerMm * scale,0.025)/2, lowerMm, 0x10b981);
-  }
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, totalHeight * 0.52, z + (index === 0 ? 0.03 : -0.03));
+    ring.scale.set(Math.max(lowerWidth / Math.max(openingRadius * 2, 0.08), 1), 1, 1);
+    ring.renderOrder = 12;
+    group.add(ring);
+    const label = createLabelSprite(`${index === 0 ? 'OREJA SUPERIOR' : 'OREJA INFERIOR'}  ${marginMm.toFixed(1)} mm`, index === 0 ? '#f59e0b' : '#10b981');
+    label.position.set(0, totalHeight * 0.78, z + (index === 0 ? 0.09 : -0.09));
+    group.add(label);
+  });
+  const upperBand = new THREE.Mesh(
+    new THREE.BoxGeometry(lowerWidth + 0.04, totalHeight * 0.96, Math.max(topMm * scale, 0.025)),
+    new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.22, depthWrite: false })
+  );
+  upperBand.position.set(0, totalHeight / 2, zFront - Math.max(topMm * scale, 0.025) / 2);
+  upperBand.renderOrder = 8;
+  group.add(upperBand);
+  const lowerBand = upperBand.clone();
+  lowerBand.material = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.22, depthWrite: false });
+  lowerBand.geometry = new THREE.BoxGeometry(lowerWidth + 0.04, totalHeight * 0.96, Math.max(bottomMm * scale, 0.025));
+  lowerBand.position.z = zBack + Math.max(bottomMm * scale, 0.025) / 2;
+  group.add(lowerBand);
 }
 
 export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true, mostrarMargenes = true }) {
@@ -301,7 +273,7 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
     const film = new THREE.Mesh(filmGeometry, new THREE.MeshPhysicalMaterial({
       color: 0x2396df,
       transparent: true,
-      opacity: geometry.tipoFilm === 'arte' && geometry.arte ? 0.08 : 0.28,
+      opacity: geometry.tipoFilm === 'arte' ? 0.34 : 0.28,
       roughness: 0.18,
       transmission: geometry.tipoFilm === 'arte' ? 0.12 : 0.48,
       side: THREE.DoubleSide,
@@ -313,29 +285,6 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
     outline.renderOrder = 4;
     pack.add(outline);
 
-    if (geometry.tipoFilm === 'arte' && geometry.arte?.imagen) {
-      const cutLength = Math.max(Number(geometry.largoCorte ?? 1), 1);
-      const artLength = Math.max(Number(geometry.arte.largo ?? cutLength), 1);
-      const offset = Number(geometry.arte.offset ?? 0);
-      const pt = geometry.puntos ?? {};
-      const cumulative = [0, pt.A ?? 0, pt.B ?? 0, pt.C ?? 0, pt.D ?? 0, pt.E ?? 0, pt.F ?? 0, cutLength].map(Number);
-      const profile = [
-        new THREE.Vector2(0,0.055), new THREE.Vector2(-lowerWidth/2,0.055),
-        new THREE.Vector2(-lowerWidth/2,shoulderStart), new THREE.Vector2(-upperWidth/2,totalHeight),
-        new THREE.Vector2(upperWidth/2,totalHeight), new THREE.Vector2(lowerWidth/2,shoulderStart),
-        new THREE.Vector2(lowerWidth/2,0.055), new THREE.Vector2(0,0.065),
-      ];
-      const artGeometry = createArtworkRibbon(profile, lowerDepth/2+0.012, cumulative.map((v)=>(v+offset)/artLength));
-      createCroppedTexture(geometry.arte.imagen, geometry.arte.recorte, Boolean(geometry.arte.invertido), (texture) => {
-        const artMesh = new THREE.Mesh(artGeometry, new THREE.MeshBasicMaterial({ map:texture, transparent:true, opacity:0.93, side:THREE.DoubleSide, depthWrite:false }));
-        artMesh.renderOrder=7; pack.add(artMesh);
-      });
-      if (mostrarMargenes) addMarginBands(pack, {
-        lowerWidth, lowerDepth, totalHeight, artWidth:Number(geometry.arte.ancho ?? 0),
-        upperMm:Number(geometry.arte.margenSuperior ?? 0), lowerMm:Number(geometry.arte.margenInferior ?? 0), scale,
-      });
-    }
-
     if (mostrarPuntos) addProfileAnnotations(pack, {
       lowerWidth,
       lowerDepth,
@@ -346,6 +295,18 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
       solape: Number(geometry.solape ?? 10),
       scale,
     });
+
+    if (mostrarMargenes) {
+      addEarMargins(pack, {
+        lowerWidth,
+        lowerDepth,
+        totalHeight,
+        marginMm: Math.max(Number(geometry.margenLateral ?? 0), 0),
+        topMm: Math.max(Number(geometry.arte?.margenSuperior ?? 0), 0),
+        bottomMm: Math.max(Number(geometry.arte?.margenInferior ?? 0), 0),
+        scale,
+      });
+    }
 
     let frame;
     const render = () => {
