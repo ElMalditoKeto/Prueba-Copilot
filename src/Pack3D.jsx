@@ -36,6 +36,7 @@ function createEnvelopeGeometry({ lowerWidth, lowerDepth, upperWidth, upperDepth
       indices.push(current + side, next + following, current + following);
     }
   }
+  indices.push(8, 9, 10, 8, 10, 11);
   const result = new THREE.BufferGeometry();
   result.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   result.setIndex(indices);
@@ -133,94 +134,7 @@ function addProfileAnnotations(group, { lowerWidth, lowerDepth, upperWidth, shou
   group.add(overlap);
 }
 
-function createFrameWithHole(width, depth, holeWidth, holeDepth) {
-  const shape = new THREE.Shape();
-  shape.moveTo(-width / 2, -depth / 2);
-  shape.lineTo(width / 2, -depth / 2);
-  shape.lineTo(width / 2, depth / 2);
-  shape.lineTo(-width / 2, depth / 2);
-  shape.closePath();
-  const hole = new THREE.Path();
-  hole.absellipse(0, 0, Math.max(holeWidth / 2, 0.03), Math.max(holeDepth / 2, 0.03), 0, Math.PI * 2, false, 0);
-  shape.holes.push(hole);
-  return new THREE.ShapeGeometry(shape, 48);
-}
-
-function createArtworkRibbon(profile, halfDepth, uValues) {
-  const positions = [], uvs = [], indices = [];
-  profile.forEach((point, index) => {
-    positions.push(point.x, point.y, -halfDepth, point.x, point.y, halfDepth);
-    uvs.push(uValues[index], 0, uValues[index], 1);
-  });
-  for (let index = 0; index < profile.length - 1; index += 1) {
-    const a = index * 2, b = a + 1, c = a + 2, d = a + 3;
-    indices.push(a, c, d, a, d, b);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-function addArtwork(group, geometryData, dims) {
-  if (!geometryData.arte?.imagen) return;
-  new THREE.TextureLoader().load(geometryData.arte.imagen, (texture) => {
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.anisotropy = 8;
-    const cut = Math.max(Number(geometryData.largoCorte || 1), 1);
-    const art = Math.max(Number(geometryData.arte.largo || cut), 1);
-    const pt = geometryData.puntos || {};
-    const cumulative = [0, pt.A || 0, pt.B || 0, pt.C || 0, pt.D || 0, pt.E || 0, pt.F || 0, cut].map(Number);
-    const profile = [
-      new THREE.Vector2(0, 0.06),
-      new THREE.Vector2(-dims.lowerWidth / 2, 0.06),
-      new THREE.Vector2(-dims.lowerWidth / 2, dims.shoulderStart),
-      new THREE.Vector2(-dims.upperWidth / 2, dims.totalHeight),
-      new THREE.Vector2(dims.upperWidth / 2, dims.totalHeight),
-      new THREE.Vector2(dims.lowerWidth / 2, dims.shoulderStart),
-      new THREE.Vector2(dims.lowerWidth / 2, 0.06),
-      new THREE.Vector2(0, 0.07),
-    ];
-    const mesh = new THREE.Mesh(
-      createArtworkRibbon(profile, dims.lowerDepth / 2 + 0.018, cumulative.map((value) => value / art)),
-      new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.94, side: THREE.DoubleSide, depthWrite: false })
-    );
-    mesh.renderOrder = 9;
-    group.add(mesh);
-  });
-}
-
-function addTopBottomEars(group, { lowerWidth, lowerDepth, upperWidth, upperDepth, totalHeight, topEarMm, bottomEarMm, scale }) {
-  const topCoverage = Math.max(topEarMm * scale, 0);
-  const bottomCoverage = Math.max(bottomEarMm * scale, 0);
-  const topHoleWidth = Math.max(upperWidth - 2 * topCoverage, 0.08);
-  const topHoleDepth = Math.max(upperDepth - 2 * topCoverage, 0.08);
-  const bottomHoleWidth = Math.max(lowerWidth - 2 * bottomCoverage, 0.08);
-  const bottomHoleDepth = Math.max(lowerDepth - 2 * bottomCoverage, 0.08);
-  const material = new THREE.MeshPhysicalMaterial({ color: 0x2396df, transparent: true, opacity: 0.3, roughness: 0.2, transmission: 0.35, side: THREE.DoubleSide, depthWrite: false });
-  const top = new THREE.Mesh(createFrameWithHole(upperWidth, upperDepth, topHoleWidth, topHoleDepth), material);
-  top.rotation.x = -Math.PI / 2;
-  top.position.y = totalHeight + 0.01;
-  top.renderOrder = 5;
-  group.add(top);
-  const bottom = new THREE.Mesh(createFrameWithHole(lowerWidth, lowerDepth, bottomHoleWidth, bottomHoleDepth), material.clone());
-  bottom.rotation.x = -Math.PI / 2;
-  bottom.position.y = 0.02;
-  bottom.renderOrder = 5;
-  group.add(bottom);
-  const topLabel = createLabelSprite(`OREJA SUPERIOR ${topEarMm.toFixed(1)} mm | HUECO ${ (topHoleWidth / scale).toFixed(1) } x ${ (topHoleDepth / scale).toFixed(1) } mm`, '#f59e0b');
-  topLabel.position.set(0, totalHeight + 0.48, 0);
-  group.add(topLabel);
-  const bottomLabel = createLabelSprite(`OREJA INFERIOR ${bottomEarMm.toFixed(1)} mm | HUECO ${ (bottomHoleWidth / scale).toFixed(1) } x ${ (bottomHoleDepth / scale).toFixed(1) } mm`, '#10b981');
-  bottomLabel.position.set(0, 0.34, -lowerDepth / 2 - 0.25);
-  group.add(bottomLabel);
-}
-
-export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true, mostrarOrejas = true, mostrarArte = true }) {
+export default function Pack3D({ geometry, resetToken = 0 }) {
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
 
@@ -326,7 +240,7 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
     const film = new THREE.Mesh(filmGeometry, new THREE.MeshPhysicalMaterial({
       color: 0x2396df,
       transparent: true,
-      opacity: geometry.tipoFilm === 'arte' && geometry.arte ? 0.08 : 0.28,
+      opacity: geometry.tipoFilm === 'arte' ? 0.34 : 0.28,
       roughness: 0.18,
       transmission: geometry.tipoFilm === 'arte' ? 0.12 : 0.48,
       side: THREE.DoubleSide,
@@ -338,11 +252,7 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
     outline.renderOrder = 4;
     pack.add(outline);
 
-    if (mostrarArte && geometry.tipoFilm === 'arte') {
-      addArtwork(pack, geometry, { lowerWidth, lowerDepth, upperWidth, shoulderStart, totalHeight });
-    }
-
-    if (mostrarPuntos) addProfileAnnotations(pack, {
+    addProfileAnnotations(pack, {
       lowerWidth,
       lowerDepth,
       upperWidth,
@@ -350,17 +260,6 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
       totalHeight,
       points: geometry.puntos,
       solape: Number(geometry.solape ?? 10),
-      scale,
-    });
-
-    if (mostrarOrejas) addTopBottomEars(pack, {
-      lowerWidth,
-      lowerDepth,
-      upperWidth,
-      upperDepth,
-      totalHeight,
-      topEarMm: Math.max(Number(geometry.orejaSuperior ?? geometry.margenLateral ?? 0), 0),
-      bottomEarMm: Math.max(Number(geometry.orejaInferior ?? geometry.margenLateral ?? 0), 0),
       scale,
     });
 
@@ -389,7 +288,7 @@ export default function Pack3D({ geometry, resetToken = 0, mostrarPuntos = true,
       controlsRef.current = null;
       mount.replaceChildren();
     };
-  }, [geometry, mostrarPuntos, mostrarOrejas, mostrarArte]);
+  }, [geometry]);
 
   useEffect(() => {
     if (resetToken > 0) controlsRef.current?.resetCamera();
