@@ -87,6 +87,13 @@ export default function App() {
   const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
   const [solape3D, setSolape3D] = useState(10);
+  const [arteImagen, setArteImagen] = useState(null);
+  const [arteNombre, setArteNombre] = useState('');
+  const [arteLargo, setArteLargo] = useState(1049);
+  const [arteAncho, setArteAncho] = useState(320);
+  const [arteOffset, setArteOffset] = useState(0);
+  const [arteInvertido, setArteInvertido] = useState(false);
+  const [arteRecorte, setArteRecorte] = useState({ izquierda: 11.4, derecha: 11.4, superior: 11.5, inferior: 12 });
 
   // ── CÁLCULOS ──
   // La orientación define qué cantidad queda sobre el ancho de bobina.
@@ -133,7 +140,7 @@ export default function App() {
 
   useEffect(() => {
     setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D]);
+  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D, arteImagen, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -165,9 +172,35 @@ export default function App() {
     setConfigs(nc);
   };
 
+  const handleArteFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setArteImagen(String(reader.result));
+      setArteNombre(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const updateGeometry3D = () => {
     if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt || tapa <= 0 || tapa >= dia) return;
-    setGeometry3D({ ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, puntos: pts, largoCorte: corte, solape: Math.min(Math.max(solape3D, 0), dia / 2) });
+    setGeometry3D({
+      ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm,
+      puntos: pts,
+      largoCorte: corte,
+      anchoBobina: folienbreite,
+      solape: Math.min(Math.max(solape3D, 0), dia / 2),
+      arte: tipoFilm === 'arte' && arteImagen ? {
+        imagen: arteImagen,
+        nombre: arteNombre,
+        largo: arteLargo,
+        ancho: arteAncho,
+        offset: arteOffset,
+        invertido: arteInvertido,
+        recorte: arteRecorte,
+      } : null,
+    });
     setGeometry3DDirty(false);
   };
 
@@ -403,6 +436,76 @@ export default function App() {
                   <Field label="Espesor Film (µm)">
                     <input type="number" value={micron} onChange={e => setMicron(+e.target.value)} className={inp} />
                   </Field>
+                  {tipoFilm === 'arte' && (
+                    <div className="art-config-card">
+                      <div className="art-config-title">
+                        <strong>Arte del film</strong>
+                        <span>La imagen se proyecta siguiendo Inicio-A-B-C-D-E-F-Final.</span>
+                      </div>
+
+                      <label className="art-upload-button">
+                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleArteFile} />
+                        <span>{arteImagen ? 'Cambiar imagen' : 'Cargar imagen del arte'}</span>
+                      </label>
+
+                      {arteNombre && <div className="art-file-name">{arteNombre}</div>}
+
+                      <div className="art-dimensions-grid">
+                        <Field label="Largo del arte (mm)">
+                          <input type="number" step="0.5" value={arteLargo} onChange={e => setArteLargo(+e.target.value)} className={inp} />
+                        </Field>
+                        <Field label="Ancho del arte (mm)">
+                          <input type="number" step="0.5" value={arteAncho} onChange={e => setArteAncho(+e.target.value)} className={inp} />
+                        </Field>
+                      </div>
+
+                      <Field label="Desplazamiento horizontal (mm)">
+                        <input type="number" step="1" value={arteOffset} onChange={e => setArteOffset(+e.target.value)} className={inp} />
+                      </Field>
+
+                      <Toggle
+                        value={arteInvertido ? 'si' : 'no'}
+                        onChange={(value) => setArteInvertido(value === 'si')}
+                        options={[{ val:'no', label:'SENTIDO NORMAL' }, { val:'si', label:'INVERTIR ARTE' }]}
+                      />
+
+                      <details className="art-crop-details">
+                        <summary>Ajustar recorte de la imagen</summary>
+                        <div className="art-crop-grid">
+                          {[
+                            ['izquierda', 'Izquierda'],
+                            ['derecha', 'Derecha'],
+                            ['superior', 'Superior'],
+                            ['inferior', 'Inferior'],
+                          ].map(([key, label]) => (
+                            <label key={key}>
+                              <span>{label}</span>
+                              <div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="45"
+                                  step="0.5"
+                                  value={arteRecorte[key]}
+                                  onChange={(event) => setArteRecorte((current) => ({ ...current, [key]: +event.target.value }))}
+                                />
+                                <b>%</b>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </details>
+
+                      <div className={`art-match-status ${Math.abs(arteLargo - corte) <= 1 ? 'ok' : 'warning'}`}>
+                        <strong>{Math.abs(arteLargo - corte) <= 1 ? 'Largo compatible' : 'Revisar largo del arte'}</strong>
+                        <span>Arte: {arteLargo.toFixed(1)} mm · Corte: {corte.toFixed(1)} mm · Diferencia: {(arteLargo - corte).toFixed(1)} mm</span>
+                      </div>
+                      <div className={`art-match-status ${Math.abs(arteAncho - folienbreite) <= 1 ? 'ok' : 'warning'}`}>
+                        <strong>{Math.abs(arteAncho - folienbreite) <= 1 ? 'Ancho compatible' : 'Revisar ancho del arte'}</strong>
+                        <span>Arte: {arteAncho.toFixed(1)} mm · Bobina: {folienbreite.toFixed(1)} mm · Diferencia: {(arteAncho - folienbreite).toFixed(1)} mm</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -727,7 +830,7 @@ export default function App() {
                   <div>
                     <span className="viewer-3d-kicker">Visualizador interactivo</span>
                     <h3>Pack 3D con film termocontraíble</h3>
-                    <p>Arrastrá para rotar, usá la rueda para acercar y el botón para aplicar cambios de disposición.</p>
+                    <p>Arrastrá para rotar. En modo CON ARTE, la imagen se envuelve siguiendo el perfil A-F y termina en S/SS.</p>
                   </div>
                   <div className="viewer-3d-actions">
                     <button type="button" className="viewer-button-secondary" onClick={() => setReset3DToken((value) => value + 1)} disabled={!geometry3D}>
@@ -739,6 +842,12 @@ export default function App() {
                   </div>
                 </div>
 
+                {tipoFilm === 'arte' && (
+                  <div className={`viewer-art-status ${arteImagen ? 'ready' : 'missing'}`}>
+                    <strong>{arteImagen ? 'Arte cargado' : 'Falta cargar el arte'}</strong>
+                    <span>{arteImagen ? `${arteNombre} · ${arteLargo.toFixed(1)} × ${arteAncho.toFixed(1)} mm` : 'Cargá una imagen en Material > Con arte.'}</span>
+                  </div>
+                )}
                 <div className="viewer-measure-controls">
                   <div>
                     <strong>Cotas del perfil</strong>
