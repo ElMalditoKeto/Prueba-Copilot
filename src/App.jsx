@@ -73,7 +73,8 @@ export default function App() {
   const [tapa,     setTapa]     = useState(26.2);   // Ø tapa superior (mm)
   const [micron,   setMicron]   = useState(50);     // espesor film (µm)
   const [canales,  setCanales]  = useState(1);      // canales del horno
-  const [folienbreite, setFolienbreite] = useState(415);  // ancho de bobina (mm)
+  const [modoBobina, setModoBobina] = useState('auto');   // auto = bobina óptima calculada
+  const [bobinaManual, setBobinaManual] = useState(415);  // ancho de bobina manual (mm)
   const [rapport,      setRapport]      = useState(880);  // largo de corte manual (mm)
   const [modoCorte, setModoCorte] = useState('auto');
   const [solapeDeseado, setSolapeDeseado] = useState(50); // solape S/SS en el fondo (mm)
@@ -92,7 +93,6 @@ export default function App() {
   const [showSave, setShowSave] = useState(false);
   const [showLoad, setShowLoad] = useState(false);
   const [geometry3D, setGeometry3D] = useState(null);
-  const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
   const [contraccion3D, setContraccion3D] = useState(100);
   const [capas3D, setCapas3D] = useState({ mapeo: true, solape: true, orejas: true });
@@ -111,6 +111,23 @@ export default function App() {
   const botellasBobina = orientacion === 'normal' ? ladoB : ladoA;
   const largoPaquete = botellasCorte * dia;
   const anchoPaquete = botellasBobina * dia;
+
+  // ── BOBINA: automática (óptima según la camada) o manual ──
+  const cara = useMemo(
+    () => facePolygon({ ancho: largoPaquete, dia, tapa, alt, altCil }),
+    [largoPaquete, dia, tapa, alt, altCil]
+  );
+  const analisisBobina = useMemo(
+    () => analizarBobina({ face: cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo }),
+    [cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]
+  );
+  const bobinaAuto = analisisBobina.bobinaRecomendada ?? analisisBobina.bobinaMin ?? bobinaManual;
+  const folienbreite = modoBobina === 'auto' ? bobinaAuto : bobinaManual;
+  const elegirBobina = (valor) => {
+    setBobinaManual(Math.round(valor * 10) / 10);
+    setModoBobina('manual');
+  };
+
   const canal = folienbreite / canales;
   const margenBruto = (canal - anchoPaquete) / 2;
   const entraEnCanal = margenBruto >= 0;
@@ -150,99 +167,50 @@ export default function App() {
 
   // ── TERMOCONTRACCIÓN Y ESTRUCTURA (cara abierta = lado A) ──
   const criterio = { huecoObjetivo, huecoMaximo };
-  const cara = useMemo(
-    () => facePolygon({ ancho: largoPaquete, dia, tapa, alt, altCil }),
-    [largoPaquete, dia, tapa, alt, altCil]
-  );
   const simActual = useMemo(
     () => simularOreja({ face: cara, oreja, contraccionMD, contraccionTD }),
     [cara, oreja, contraccionMD, contraccionTD]
   );
   const estructura = evaluarEstructura(simActual, criterio);
-  const analisisBobina = useMemo(
-    () => analizarBobina({ face: cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo }),
-    [cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]
-  );
-  const camadas = useMemo(() => {
-    const combinaciones = [[2, 2], [2, 3], [3, 3], [3, 4], [4, 4], [3, 6], [4, 6]];
-    if (!combinaciones.some(([a, b]) => a === ladoA && b === ladoB)) combinaciones.push([ladoA, ladoB]);
-    return combinaciones.map(([a, b]) => {
-      const nCorte = orientacion === 'normal' ? a : b;
-      const nBobina = orientacion === 'normal' ? b : a;
-      const ancho = nBobina * dia;
-      const caraFila = facePolygon({ ancho: nCorte * dia, dia, tapa, alt, altCil });
-      const orejaFila = (canal - ancho) / 2;
-      const sim = simularOreja({ face: caraFila, oreja: Math.max(0, orejaFila), contraccionMD, contraccionTD });
-      const analisis = analizarBobina({ face: caraFila, anchoPaquete: ancho, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo });
+  // Comparativa del pack actual con distintos anchos de bobina.
+  const comparativaBobinas = useMemo(() => {
+    const base = anchoPaquete * canales;
+    const { bobinaMin, bobinaMax, bobinaRecomendada } = analisisBobina;
+    let paso = 10 * canales;
+    const desde = Math.max(base, (bobinaMin ?? base) - 2 * paso);
+    const hasta = Math.max(bobinaMax ?? (bobinaRecomendada ?? base) + 150, folienbreite) + 2 * paso;
+    while ((hasta - desde) / paso > 14) paso *= 2;
+    const valores = new Set();
+    for (let v = Math.ceil(desde / paso) * paso; v <= hasta; v += paso) valores.add(v);
+    [folienbreite, bobinaRecomendada, bobinaMin, bobinaMax].forEach((v) => {
+      if (v !== null && v !== undefined) valores.add(Math.round(v * 10) / 10);
+    });
+    return [...valores].sort((a, b) => a - b).map((bobina) => {
+      const orejaFila = (bobina / canales - anchoPaquete) / 2;
+      const sim = simularOreja({ face: cara, oreja: Math.max(0, orejaFila), contraccionMD, contraccionTD });
+      const etiquetas = [];
+      if (Math.abs(bobina - folienbreite) < 0.05) etiquetas.push('actual');
+      if (bobina === bobinaRecomendada) etiquetas.push('recomendada');
+      if (bobina === bobinaMin) etiquetas.push('mínima');
+      if (bobina === bobinaMax) etiquetas.push('sobra film');
       return {
-        nombre: `${a} × ${b}`,
-        actual: a === ladoA && b === ladoB,
-        anchoPaquete: ancho,
+        bobina,
+        etiquetas,
         entra: orejaFila >= 0,
         oreja: orejaFila,
-        hueco: sim.ratioHueco * 100,
+        sim,
         estructura: evaluarEstructura(sim, { huecoObjetivo, huecoMaximo }),
-        bobinaRecomendada: analisis.bobinaRecomendada,
       };
     });
-  }, [ladoA, ladoB, orientacion, dia, tapa, alt, altCil, canal, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]);
+  }, [analisisBobina, anchoPaquete, canales, cara, folienbreite, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]);
 
   const warnings = validate({ altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal, anchoPaquete, canal, solape: diferenciaCorte, estructura, ratioHueco: simActual.ratioHueco });
 
-  useEffect(() => {
-    setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, folienbreite, orientacion, tipoFilm, corte, contraccionMD, contraccionTD, arteImagen, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
-
-  // ── CONFIG PERSISTENCE ──
-  const applyConfig = (p) => {
-    setLadoA(p.ladoA ?? p.N ?? p.botL ?? 3);
-    setLadoB(p.ladoB ?? p.M ?? p.botT ?? 4);
-    setDia(p.dia);       setAlt(p.alt);     setAltCil(p.altCil);
-    setTapa(p.tapa);     setMicron(p.micron); setCanales(p.canales);
-    setFolienbreite(p.folienbreite ?? p.bobinaM ?? p.bobina ?? 415);
-    setRapport(p.rapport ?? p.pasoArte ?? p.paso ?? 880);
-    setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
-    setModoCorte(p.modoCorte ?? 'auto');
-    setOrientacion(p.orientacion ?? 'normal');
-    setSolapeDeseado(p.solape ?? 50);
-    setContraccionMD(p.contraccionMD ?? 50);
-    setContraccionTD(p.contraccionTD ?? 20);
-    setHuecoObjetivo(p.huecoObjetivo ?? 35);
-    setHuecoMaximo(p.huecoMaximo ?? 55);
-  };
-
-  const saveConfig = () => {
-    if (!cfgName.trim()) return;
-    const c = {
-      n: cfgName, t: new Date().toLocaleDateString('es-AR'),
-      ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
-      folienbreite, rapport, tipoFilm, modoCorte, orientacion,
-      solape: solapeDeseado, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo,
-    };
-    const nc = [...configs, c];
-    setConfigs(nc);
-    setCfgName(''); setShowSave(false);
-  };
-
-  const deleteCfg = (i) => {
-    const nc = configs.filter((_, j) => j !== i);
-    setConfigs(nc);
-  };
-
-  const handleArteFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setArteImagen(String(reader.result));
-      setArteNombre(file.name);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const updateGeometry3D = () => {
-    if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt || tapa <= 0 || tapa >= dia) return;
-    setGeometry3D({
+  // El 3D sigue a los datos en vivo (con una pequeña espera para no regenerar en cada tecla).
+  const geometryValida = ladoA >= 1 && ladoB >= 1 && dia > 0 && alt > 0 && altCil >= 0 && altCil <= alt && tapa > 0 && tapa < dia;
+  const geometriaActual = useMemo(() => {
+    if (!geometryValida) return null;
+    return {
       ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm,
       botellasCorte, botellasBobina,
       anchoCara: largoPaquete,
@@ -264,8 +232,62 @@ export default function App() {
         invertido: arteInvertido,
         recorte: arteRecorte,
       } : null,
-    });
-    setGeometry3DDirty(false);
+    };
+    // pts no va en las dependencias: se recalcula de los mismos datos (disposición y corte).
+  }, [geometryValida, ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, corte, folienbreite, oreja, simActual, arteImagen, arteNombre, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
+
+  useEffect(() => {
+    if (!geometriaActual) return undefined;
+    const timer = setTimeout(() => setGeometry3D(geometriaActual), 180);
+    return () => clearTimeout(timer);
+  }, [geometriaActual]);
+
+  // ── CONFIG PERSISTENCE ──
+  const applyConfig = (p) => {
+    setLadoA(p.ladoA ?? p.N ?? p.botL ?? 3);
+    setLadoB(p.ladoB ?? p.M ?? p.botT ?? 4);
+    setDia(p.dia);       setAlt(p.alt);     setAltCil(p.altCil);
+    setTapa(p.tapa);     setMicron(p.micron); setCanales(p.canales);
+    setBobinaManual(p.folienbreite ?? p.bobinaM ?? p.bobina ?? 415);
+    setModoBobina(p.modoBobina ?? 'manual');
+    setRapport(p.rapport ?? p.pasoArte ?? p.paso ?? 880);
+    setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
+    setModoCorte(p.modoCorte ?? 'auto');
+    setOrientacion(p.orientacion ?? 'normal');
+    setSolapeDeseado(p.solape ?? 50);
+    setContraccionMD(p.contraccionMD ?? 50);
+    setContraccionTD(p.contraccionTD ?? 20);
+    setHuecoObjetivo(p.huecoObjetivo ?? 35);
+    setHuecoMaximo(p.huecoMaximo ?? 55);
+  };
+
+  const saveConfig = () => {
+    if (!cfgName.trim()) return;
+    const c = {
+      n: cfgName, t: new Date().toLocaleDateString('es-AR'),
+      ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
+      folienbreite, rapport, tipoFilm, modoCorte, orientacion,
+      modoBobina, solape: solapeDeseado, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo,
+    };
+    const nc = [...configs, c];
+    setConfigs(nc);
+    setCfgName(''); setShowSave(false);
+  };
+
+  const deleteCfg = (i) => {
+    const nc = configs.filter((_, j) => j !== i);
+    setConfigs(nc);
+  };
+
+  const handleArteFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setArteImagen(String(reader.result));
+      setArteNombre(file.name);
+    };
+    reader.readAsDataURL(file);
   };
 
   // ── SVG PLAN VIEW ──
@@ -462,9 +484,29 @@ export default function App() {
               <div style={{ borderBottom: '1px solid #e5e5e5' }}>
                 <SectionHeader num="02" label="Datos de Bobina" />
                 <div className="p-3 space-y-2.5">
-                  <Field label="Ancho total de bobina (mm)">
-                    <input type="number" step="0.5" value={folienbreite} onChange={e => setFolienbreite(+e.target.value)} className={inpAmber} />
+                  <Field label="Ancho de bobina">
+                    <Toggle value={modoBobina} onChange={(modo) => {
+                      if (modo === 'manual' && modoBobina === 'auto') setBobinaManual(folienbreite);
+                      setModoBobina(modo);
+                    }} options={[
+                      { val:'auto', label:'ÓPTIMA (AUTO)' },
+                      { val:'manual', label:'MANUAL' },
+                    ]} />
                   </Field>
+                  {modoBobina === 'manual' ? (
+                    <Field label="Ancho total de bobina (mm)">
+                      <input type="number" step="0.5" value={bobinaManual} onChange={e => setBobinaManual(+e.target.value)} className={inpAmber} />
+                    </Field>
+                  ) : (
+                    <div className="calculated-hint">
+                      Bobina óptima: <strong>{folienbreite.toFixed(0)} mm</strong>
+                      <span>
+                        {analisisBobina.bobinaRecomendada === null
+                          ? 'No alcanza el hueco objetivo: se usa la bobina mínima aceptable.'
+                          : `Oreja ${oreja.toFixed(1)} mm por lado · hueco ${(simActual.ratioHueco * 100).toFixed(1)}% de la cara`}
+                      </span>
+                    </div>
+                  )}
                   <Field label="Cálculo del largo de corte">
                     <Toggle value={modoCorte} onChange={setModoCorte} options={[
                       { val:'auto', label:'AUTOMÁTICO' },
@@ -664,7 +706,10 @@ export default function App() {
                 huecoObjetivo={huecoObjetivo}
                 huecoMaximo={huecoMaximo}
                 contraccionMD={contraccionMD}
-                camadas={camadas}
+                comparativa={comparativaBobinas}
+                modoBobina={modoBobina}
+                onElegirBobina={elegirBobina}
+                onModoAuto={() => setModoBobina('auto')}
               />
 
               {/* ── PLAN VIEW SVG ── */}
@@ -944,12 +989,7 @@ export default function App() {
                   <div>
                     <span className="viewer-3d-kicker">Visualizador interactivo</span>
                     <h3>Pack 3D: antes y después del horno</h3>
-                    <p>Arrastrá para rotar. Mové la barra de contracción para ver cómo el film se pega al pack y las orejas se cierran sobre el lado A.</p>
-                  </div>
-                  <div className="viewer-3d-actions">
-                    <button type="button" className="viewer-button-primary" onClick={updateGeometry3D} disabled={warnings.some((warning) => warning.includes('altura') || warning.includes('diámetro') || warning.includes('disposición'))}>
-                      {geometry3D ? 'Actualizar geometría 3D' : 'Generar modelo 3D'}
-                    </button>
+                    <p>Se actualiza solo con cada cambio. Arrastrá para rotar. Mové la barra de contracción para ver cómo el film se pega al pack y las orejas se cierran sobre el lado A.</p>
                   </div>
                 </div>
 
@@ -1001,8 +1041,8 @@ export default function App() {
                   ))}
                 </div>
 
-                {geometry3DDirty && geometry3D && (
-                  <div className="viewer-dirty-notice">Hay cambios pendientes. El modelo conserva la última geometría válida.</div>
+                {!geometryValida && geometry3D && (
+                  <div className="viewer-dirty-notice">Hay datos inválidos. El modelo conserva la última geometría válida.</div>
                 )}
 
                 {geometry3D ? (
@@ -1010,8 +1050,8 @@ export default function App() {
                 ) : (
                   <div className="viewer-3d-empty">
                     <div className="viewer-3d-icon">3D</div>
-                    <strong>Modelo todavía no generado</strong>
-                    <span>Presioná “Generar modelo 3D” para crear el pack con los datos actuales.</span>
+                    <strong>Generando modelo…</strong>
+                    <span>El 3D se actualiza solo con los datos del pack.</span>
                   </div>
                 )}
               </section>

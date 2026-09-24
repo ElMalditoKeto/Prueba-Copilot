@@ -317,3 +317,22 @@ body {
 .viewer-layer-controls button.active.layer-solape { border-color: #f97316; color: #c2410c; background: #fff7ed; }
 .viewer-layer-controls button.active.layer-orejas { border-color: #7c3aed; color: #6d28d9; background: #f5f3ff; }
 .viewer-layer-sep { margin-left: 12px; }
+
+/* Gráfico interactivo y comparativa de bobinas */
+.bobina-chart-svg { cursor: crosshair; touch-action: none; user-select: none; }
+.chart-grid-strong { stroke: #6f7b8e; stroke-width: 1.2; }
+.chart-mark-label { fill: #6f7b8e; font-size: 9px; font-weight: 700; }
+.chart-reco-dot { fill: #079560; stroke: #fff; stroke-width: 2; }
+.chart-reco-label { fill: #08764e; font-size: 10px; font-weight: 800; }
+.bobina-chart-readout em { color: #275bcb; font-style: normal; font-weight: 700; }
+.bobina-header-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.bobina-modo { padding: 5px 11px; border-radius: 999px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.bobina-modo-auto { background: #effbf5; color: #08764e; border: 1px solid #b9ead5; }
+.bobina-modo-manual { background: #fff; color: #275bcb; border: 1px solid #cfe0ff; cursor: pointer; }
+.bobina-modo-manual:hover { background: #f3f7ff; }
+.fila-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #eef2f7; color: #4e5c72; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.fila-tag-actual { background: #0e1729; color: #fff; }
+.fila-tag-recomendada { background: #079560; color: #fff; }
+.fila-usar { padding: 4px 10px; border: 1px solid #cfe0ff; border-radius: 999px; background: #fff; color: #275bcb; font-size: 9px; font-weight: 800; }
+.fila-usar:hover { background: #f3f7ff; }
+@media (max-width: 620px) { .bobina-header-side { align-items: flex-start; } }

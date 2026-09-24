@@ -291,6 +291,7 @@ function createFilm({ loop, corte, solape, profundidad, oreja, hueco, scale, art
 export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capas, vista }) {
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
+  const camaraRef = useRef(null); // conserva la cámara cuando el modelo se regenera
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -326,7 +327,13 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
       controls.target.set(0, totalHeight / 2, 0);
       controls.update();
     };
-    setView('iso');
+    if (camaraRef.current) {
+      camera.position.copy(camaraRef.current.position);
+      controls.target.copy(camaraRef.current.target);
+      controls.update();
+    } else {
+      setView('iso');
+    }
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x718296, 2.4));
     const mainLight = new THREE.DirectionalLight(0xffffff, 3.2);
@@ -541,6 +548,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     return () => {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
+      camaraRef.current = { position: camera.position.clone(), target: controls.target.clone() };
       controls.dispose();
       disposeScene(scene);
       renderer.dispose();
