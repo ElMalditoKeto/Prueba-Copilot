@@ -533,7 +533,6 @@ export default function App() {
                     value: (entraEnCanal ? oreja : deficitCanal).toFixed(1),
                     sub: entraEnCanal ? 'Espacio libre por lado' : `Bobina mínima ${anchoBobinaMinimo.toFixed(1)} mm`,
                     accent: false,
-                    green: true,
                   },
                   {
                     label: 'AJUSTE DE CORTE',
@@ -542,8 +541,8 @@ export default function App() {
                     accent: false,
                     blue: true,
                   },
-                ].map(({ label, value, sub, accent, green, blue }, i) => (
-                  <div key={label} className={`result-card ${accent ? 'result-card-primary' : ''} ${green ? 'result-card-green' : ''} ${blue ? 'result-card-blue' : ''}`}>
+                ].map(({ label, value, sub, accent, blue }, i) => (
+                  <div key={label} className={`result-card ${accent ? 'result-card-primary' : ''} ${blue ? 'result-card-blue' : ''}`}>
                     <div className="result-label">{label}</div>
                     <div className="result-value">{value}</div>
                     <div>

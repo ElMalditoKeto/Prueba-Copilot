@@ -33,7 +33,6 @@ body {
 .result-value { margin: 16px 0 10px; color: #0e1729; font-family: 'JetBrains Mono', monospace; font-size: 40px; font-weight: 900; line-height: 1; }
 .result-detail { color: #9aa3b2; font-size: 10px; }
 .result-card-primary .result-label,.result-card-primary .result-value,.result-card-primary .result-detail { color: white; }
-.result-card-green .result-value { color: #079560; }
 .result-card-blue .result-value { color: #275bcb; }
 .orientation-help { margin-top: 6px; color: #6b7280; font-size: 9px; line-height: 1.4; }
 .calculated-hint { padding: 12px 14px; border: 1px solid #cfe0ff; border-radius: 14px; background: #f3f7ff; color: #2457b7; font-size: 11px; }
