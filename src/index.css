@@ -253,3 +253,67 @@ body {
   .viewer-art-status { align-items: flex-start; flex-direction: column; }
   .viewer-art-status span { text-align: left; }
 }
+
+/* Bobina óptima y estructura */
+.bobina-panel { border: 1px solid #dfe5ed; border-radius: 24px; background: #fff; padding: 20px 22px; box-shadow: 0 12px 30px rgba(15,23,42,.06); display: grid; gap: 16px; }
+.bobina-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.bobina-header h3 { margin-bottom: 5px; color: #172033; font-size: 18px; }
+.bobina-header p { color: #6f7b8e; font-size: 11px; line-height: 1.45; max-width: 640px; }
+.bobina-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+.bobina-kpi { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid #e8ebef; border-radius: 18px; background: #fafbfc; }
+.bobina-kpi span { color: #7d8798; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.bobina-kpi strong { color: #0e1729; font-size: 22px; font-weight: 900; line-height: 1.1; }
+.bobina-kpi small { color: #8a94a5; font-size: 9px; line-height: 1.35; }
+.bobina-kpi-main { border: 0; background: #0e1729; }
+.bobina-kpi-main span, .bobina-kpi-main small { color: #aeb8c8; }
+.bobina-kpi-main strong { color: #fff; }
+.bobina-detail { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; padding: 12px 16px; border: 1px solid #e3dcf7; border-radius: 16px; background: #faf8ff; }
+.bobina-detail div { display: flex; flex-direction: column; gap: 3px; }
+.bobina-detail span { color: #6b5c93; font-size: 9px; }
+.bobina-detail strong { color: #2e1f5e; font-size: 13px; }
+.bobina-chart svg { display: block; font-family: 'JetBrains Mono', monospace; }
+.zona-ok { fill: #079560; opacity: .08; }
+.zona-justo { fill: #d97706; opacity: .09; }
+.zona-debil { fill: #dc2626; opacity: .07; }
+.zona-exceso { fill: #64748b; opacity: .12; }
+.chart-grid { stroke: #e5e9ef; stroke-width: 1; }
+.chart-tick { fill: #8a94a5; font-size: 10px; }
+.chart-axis { fill: #6f7b8e; font-size: 10px; }
+.chart-zone-label { fill: #4b5563; font-size: 9px; font-weight: 700; }
+.chart-line { fill: none; stroke: #275bcb; stroke-width: 2; stroke-linejoin: round; }
+.chart-actual { stroke: #0e1729; stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart-actual-dot { fill: #0e1729; stroke: #fff; stroke-width: 2; }
+.chart-actual-label { fill: #0e1729; font-size: 10px; font-weight: 800; }
+.chart-crosshair { stroke: #94a3b8; stroke-width: 1; }
+.chart-hover-dot { fill: #275bcb; stroke: #fff; stroke-width: 2; }
+.bobina-chart-readout { margin-top: 6px; min-height: 16px; color: #4e5c72; font-size: 10px; }
+.estado-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.estado-ok { background: #effbf5; color: #08764e; border: 1px solid #b9ead5; }
+.estado-justo { background: #fff8e7; color: #9a620a; border: 1px solid #f7d49b; }
+.estado-exceso { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+.estado-debil { background: #fff2f2; color: #c61c24; border: 1px solid #ffc2c2; }
+.camadas-title { margin-bottom: 8px; color: #6b7280; font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.camadas-table-wrap { overflow-x: auto; }
+.camadas-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.camadas-table th { padding: 7px 10px; border-bottom: 1.5px solid #111; color: #6b7280; font-size: 9px; text-align: left; text-transform: uppercase; }
+.camadas-table td { padding: 7px 10px; border-bottom: 1px solid #eef0f3; color: #1f2937; font-variant-numeric: tabular-nums; }
+.camada-actual td { background: #f3f7ff; font-weight: 800; }
+@media (max-width: 1100px) { .bobina-kpis, .bobina-detail { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 620px) { .bobina-kpis, .bobina-detail { grid-template-columns: 1fr; } .bobina-header { flex-direction: column; } }
+
+/* Controles 3D: antes/después y capas */
+.viewer-shrink-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 22px; padding: 14px 22px; border-bottom: 1px solid #dfe7f0; background: #f6f9fc; }
+.viewer-shrink-toggle { display: flex; overflow: hidden; border: 1px solid #cfdae6; border-radius: 999px; }
+.viewer-shrink-toggle button { padding: 9px 15px; background: #fff; color: #4e5c72; font-size: 10px; font-weight: 800; }
+.viewer-shrink-toggle button.active { background: #0e1729; color: #fff; }
+.viewer-shrink-slider { display: flex; flex: 1 1 220px; flex-direction: column; gap: 4px; color: #4e5c72; font-size: 10px; }
+.viewer-shrink-slider input { width: 100%; accent-color: #ef1f25; }
+.viewer-shrink-stats { display: flex; gap: 14px; color: #6f7b8e; font-size: 10px; }
+.viewer-shrink-stats strong { color: #172033; }
+.viewer-layer-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 22px; border-bottom: 1px solid #e4eaf1; font-size: 10px; color: #6f7b8e; }
+.viewer-layer-controls button { padding: 7px 12px; border: 1px solid #d7dde6; border-radius: 999px; background: #fff; color: #445066; font-size: 10px; font-weight: 800; }
+.viewer-layer-controls button:disabled { opacity: .45; cursor: not-allowed; }
+.viewer-layer-controls button.active.layer-mapeo { border-color: #e61c24; color: #c71920; background: #fff5f5; }
+.viewer-layer-controls button.active.layer-solape { border-color: #f97316; color: #c2410c; background: #fff7ed; }
+.viewer-layer-controls button.active.layer-orejas { border-color: #7c3aed; color: #6d28d9; background: #f5f3ff; }
+.viewer-layer-sep { margin-left: 12px; }

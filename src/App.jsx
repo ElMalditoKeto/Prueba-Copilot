@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Pack3D from './Pack3D';
+import BobinaOptima from './BobinaOptima';
+import { facePolygon, simularOreja, evaluarEstructura, analizarBobina } from './shrinkModel';
 
 // ─── SMALL COMPONENTS ──────────────────────────────────────────────────────────
 
@@ -54,7 +56,8 @@ function validate(f) {
   if (f.ladoA < 1 || f.ladoB < 1) warns.push('La disposición mínima es 1 × 1.');
   if (f.micron < 30) warns.push('El espesor es menor a 30 µm.');
   if (!f.entraEnCanal) warns.push(`El paquete requiere ${f.anchoPaquete.toFixed(1)} mm por canal y solo hay ${f.canal.toFixed(1)} mm.`);
-  if (f.modoCorte === 'manual' && f.diferenciaCorte < 0) warns.push(`El largo manual es ${Math.abs(f.diferenciaCorte).toFixed(1)} mm menor que el perfil calculado.`);
+  if (f.solape < 0) warns.push(`El largo de corte no cierra el perfil: faltan ${Math.abs(f.solape).toFixed(1)} mm de solape.`);
+  if (f.entraEnCanal && f.estructura.estado === 'debil') warns.push(`Oreja insuficiente: el hueco del lado A queda en ${(f.ratioHueco * 100).toFixed(0)}% de la cara.`);
   return warns;
 }
 
@@ -73,6 +76,11 @@ export default function App() {
   const [folienbreite, setFolienbreite] = useState(415);  // ancho de bobina (mm)
   const [rapport,      setRapport]      = useState(880);  // largo de corte manual (mm)
   const [modoCorte, setModoCorte] = useState('auto');
+  const [solapeDeseado, setSolapeDeseado] = useState(50); // solape S/SS en el fondo (mm)
+  const [contraccionMD, setContraccionMD] = useState(50); // % contracción longitudinal del film
+  const [contraccionTD, setContraccionTD] = useState(20); // % contracción transversal del film
+  const [huecoObjetivo, setHuecoObjetivo] = useState(35); // % de la cara lado A
+  const [huecoMaximo, setHuecoMaximo] = useState(55);     // % de la cara lado A
   const [orientacion, setOrientacion] = useState('normal');
   const [tipoFilm, setTipoFilm] = useState('cristal');
   const [producto, setProducto] = useState('BNQ 500 ×12');
@@ -86,7 +94,9 @@ export default function App() {
   const [geometry3D, setGeometry3D] = useState(null);
   const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
-  const [solape3D, setSolape3D] = useState(10);
+  const [contraccion3D, setContraccion3D] = useState(100);
+  const [capas3D, setCapas3D] = useState({ mapeo: true, solape: true, orejas: true });
+  const [vista3D, setVista3D] = useState('iso');
   const [arteImagen, setArteImagen] = useState(null);
   const [arteNombre, setArteNombre] = useState('');
   const [arteLargo, setArteLargo] = useState(1049);
@@ -108,17 +118,19 @@ export default function App() {
   const deficitCanal = Math.max(0, anchoPaquete - canal);
   const anchoBobinaMinimo = anchoPaquete * canales;
 
+  // El film recorre el pack en el sentido de corte: fondo = largo del pack (lado A).
   const anchoTop = (botellasCorte - 1) * dia + tapa;
   const desplazamientoHombro = Math.max(0, (dia - tapa) / 2);
   const alturaHombro = Math.max(0, alt - altCil);
   const longitudHombro = Math.sqrt(alturaHombro ** 2 + desplazamientoHombro ** 2);
-  const perfilGeometrico = anchoPaquete + 2 * altCil + 2 * longitudHombro + anchoTop;
-  const largoCorteCalculado = Math.ceil(perfilGeometrico / 10) * 10;
+  const perfilGeometrico = largoPaquete + 2 * altCil + 2 * longitudHombro + anchoTop;
+  const largoCorteCalculado = perfilGeometrico + solapeDeseado;
   const corte = modoCorte === 'auto' ? largoCorteCalculado : rapport;
-  const diferenciaCorte = corte - perfilGeometrico;
+  const diferenciaCorte = corte - perfilGeometrico; // solape efectivo S/SS
   const ajustePorExtremo = diferenciaCorte / 2;
 
-  const ptA = anchoPaquete / 2;
+  // Mapeo desde el inicio del film: el solape queda centrado en el fondo (S/SS).
+  const ptA = largoPaquete / 2 + ajustePorExtremo;
   const ptB = ptA + altCil;
   const ptC = ptB + longitudHombro;
   const ptD = ptC + anchoTop;
@@ -136,11 +148,50 @@ export default function App() {
   const solape = diferenciaCorte;
   const solapeLado = ajustePorExtremo;
 
-  const warnings = validate({ altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal, anchoPaquete, canal, modoCorte, diferenciaCorte });
+  // ── TERMOCONTRACCIÓN Y ESTRUCTURA (cara abierta = lado A) ──
+  const criterio = { huecoObjetivo, huecoMaximo };
+  const cara = useMemo(
+    () => facePolygon({ ancho: largoPaquete, dia, tapa, alt, altCil }),
+    [largoPaquete, dia, tapa, alt, altCil]
+  );
+  const simActual = useMemo(
+    () => simularOreja({ face: cara, oreja, contraccionMD, contraccionTD }),
+    [cara, oreja, contraccionMD, contraccionTD]
+  );
+  const estructura = evaluarEstructura(simActual, criterio);
+  const analisisBobina = useMemo(
+    () => analizarBobina({ face: cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo }),
+    [cara, anchoPaquete, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]
+  );
+  const camadas = useMemo(() => {
+    const combinaciones = [[2, 2], [2, 3], [3, 3], [3, 4], [4, 4], [3, 6], [4, 6]];
+    if (!combinaciones.some(([a, b]) => a === ladoA && b === ladoB)) combinaciones.push([ladoA, ladoB]);
+    return combinaciones.map(([a, b]) => {
+      const nCorte = orientacion === 'normal' ? a : b;
+      const nBobina = orientacion === 'normal' ? b : a;
+      const ancho = nBobina * dia;
+      const caraFila = facePolygon({ ancho: nCorte * dia, dia, tapa, alt, altCil });
+      const orejaFila = (canal - ancho) / 2;
+      const sim = simularOreja({ face: caraFila, oreja: Math.max(0, orejaFila), contraccionMD, contraccionTD });
+      const analisis = analizarBobina({ face: caraFila, anchoPaquete: ancho, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo });
+      return {
+        nombre: `${a} × ${b}`,
+        actual: a === ladoA && b === ladoB,
+        anchoPaquete: ancho,
+        entra: orejaFila >= 0,
+        oreja: orejaFila,
+        hueco: sim.ratioHueco * 100,
+        estructura: evaluarEstructura(sim, { huecoObjetivo, huecoMaximo }),
+        bobinaRecomendada: analisis.bobinaRecomendada,
+      };
+    });
+  }, [ladoA, ladoB, orientacion, dia, tapa, alt, altCil, canal, canales, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo]);
+
+  const warnings = validate({ altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal, anchoPaquete, canal, solape: diferenciaCorte, estructura, ratioHueco: simActual.ratioHueco });
 
   useEffect(() => {
     setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D, arteImagen, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
+  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, folienbreite, orientacion, tipoFilm, corte, contraccionMD, contraccionTD, arteImagen, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -153,6 +204,11 @@ export default function App() {
     setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
     setModoCorte(p.modoCorte ?? 'auto');
     setOrientacion(p.orientacion ?? 'normal');
+    setSolapeDeseado(p.solape ?? 50);
+    setContraccionMD(p.contraccionMD ?? 50);
+    setContraccionTD(p.contraccionTD ?? 20);
+    setHuecoObjetivo(p.huecoObjetivo ?? 35);
+    setHuecoMaximo(p.huecoMaximo ?? 55);
   };
 
   const saveConfig = () => {
@@ -161,6 +217,7 @@ export default function App() {
       n: cfgName, t: new Date().toLocaleDateString('es-AR'),
       ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
       folienbreite, rapport, tipoFilm, modoCorte, orientacion,
+      solape: solapeDeseado, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo,
     };
     const nc = [...configs, c];
     setConfigs(nc);
@@ -187,10 +244,17 @@ export default function App() {
     if (ladoA < 1 || ladoB < 1 || dia <= 0 || alt <= 0 || altCil < 0 || altCil > alt || tapa <= 0 || tapa >= dia) return;
     setGeometry3D({
       ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm,
+      botellasCorte, botellasBobina,
+      anchoCara: largoPaquete,
+      profundidad: anchoPaquete,
       puntos: pts,
       largoCorte: corte,
       anchoBobina: folienbreite,
-      solape: Math.min(Math.max(solape3D, 0), dia / 2),
+      solape: diferenciaCorte,
+      oreja,
+      hueco: simActual.hueco,
+      orejaSup: simActual.orejaSup,
+      orejaInf: simActual.orejaInf,
       arte: tipoFilm === 'arte' && arteImagen ? {
         imagen: arteImagen,
         nombre: arteNombre,
@@ -209,7 +273,6 @@ export default function App() {
   const packXStart = (corte - ladoTop) / 2;
   const today = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-  const solapePathStart = solapeLado; // alias para SVG
 
   // Perfil lateral: A y F en los bordes del pack (interno), S/SS en el centro del fondo
   // El solape es el tramo extra que va FUERA de A y F (hacia el centro, por debajo)
@@ -230,8 +293,8 @@ export default function App() {
   const sideFilmPath = sideFilmParts.join(' ');
 
   // Tramos de solape (se dibujan separados, punteados, desde A y F hacia el centro)
-  const solapePathL = `M ${ladoTop/2} ${alt} L ${solapeLado} ${alt}`;
-  const solapePathR = `M ${ladoTop - solapeLado} ${alt} L ${ladoTop/2} ${alt}`;
+  const solapeVisible = Math.max(0, Math.min(solape, ladoTop));
+  const solapePath = `M ${ladoTop/2 - solapeVisible/2} ${alt + 5} L ${ladoTop/2 + solapeVisible/2} ${alt + 5}`;
 
   const sidePoints = [
     ['A', 0,                                    alt,          -1],
@@ -409,11 +472,19 @@ export default function App() {
                     ]} />
                   </Field>
                   {modoCorte === 'manual' ? (
-                    <Field label="Largo de corte manual (mm)">
-                      <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
-                    </Field>
+                    <>
+                      <Field label="Largo de corte manual (mm)">
+                        <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
+                      </Field>
+                      <div className="calculated-hint">Solape resultante: <strong>{diferenciaCorte.toFixed(1)} mm</strong><span>Perfil geométrico: {perfilGeometrico.toFixed(1)} mm</span></div>
+                    </>
                   ) : (
-                    <div className="calculated-hint">Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong><span>Perfil geométrico: {perfilGeometrico.toFixed(1)} mm</span></div>
+                    <>
+                      <Field label="Solape S/SS (mm)">
+                        <input type="number" step="1" min="0" value={solapeDeseado} onChange={e => setSolapeDeseado(+e.target.value)} className={inpAmber} />
+                      </Field>
+                      <div className="calculated-hint">Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong><span>Perfil {perfilGeometrico.toFixed(1)} mm + solape {solapeDeseado.toFixed(1)} mm</span></div>
+                    </>
                   )}
                   <Field label="Horno">
                     <select value={canales} onChange={e => setCanales(+e.target.value)} className={inp}>
@@ -508,6 +579,32 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+              {/* 04 TERMOCONTRACCIÓN */}
+              <div style={{ borderBottom: '1px solid #e5e5e5' }}>
+                <SectionHeader num="04" label="Termocontracción" />
+                <div className="p-3 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Contracción long. (%)">
+                      <input type="number" step="1" min="0" max="95" value={contraccionMD} onChange={e => setContraccionMD(+e.target.value)} className={inp} />
+                    </Field>
+                    <Field label="Contracción transv. (%)">
+                      <input type="number" step="1" min="0" max="95" value={contraccionTD} onChange={e => setContraccionTD(+e.target.value)} className={inp} />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Hueco objetivo (% cara)">
+                      <input type="number" step="1" min="0" max="100" value={huecoObjetivo} onChange={e => setHuecoObjetivo(+e.target.value)} className={inp} />
+                    </Field>
+                    <Field label="Hueco máximo (% cara)">
+                      <input type="number" step="1" min="0" max="100" value={huecoMaximo} onChange={e => setHuecoMaximo(+e.target.value)} className={inp} />
+                    </Field>
+                  </div>
+                  <div className="orientation-help">
+                    Valores a ojo hasta tener la ficha técnica del film. El hueco se mide sobre la cara abierta del lado A.
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* ─────────── RIGHT — DRAWING ─────────── */}
@@ -536,7 +633,7 @@ export default function App() {
                     green: true,
                   },
                   {
-                    label: 'AJUSTE DE CORTE',
+                    label: 'SOLAPE S/SS',
                     value: diferenciaCorte.toFixed(1),
                     sub:   `${ajustePorExtremo.toFixed(1)} mm por extremo`,
                     accent: false,
@@ -557,6 +654,18 @@ export default function App() {
                 <strong>{entraEnCanal ? 'Configuración compatible' : 'Configuración incompatible'}</strong>
                 <span>{entraEnCanal ? `${canal.toFixed(1)} mm por canal · margen ${oreja.toFixed(1)} mm por lado` : `${canal.toFixed(1)} mm por canal · se necesitan ${anchoBobinaMinimo.toFixed(1)} mm de bobina total`}</span>
               </div>
+
+              <BobinaOptima
+                analisis={analisisBobina}
+                sim={simActual}
+                estructura={estructura}
+                folienbreite={folienbreite}
+                canales={canales}
+                huecoObjetivo={huecoObjetivo}
+                huecoMaximo={huecoMaximo}
+                contraccionMD={contraccionMD}
+                camadas={camadas}
+              />
 
               {/* ── PLAN VIEW SVG ── */}
               <div style={{ border: '1px solid #d1d5db' }}>
@@ -704,6 +813,12 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
+                      <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
+                        <td className="px-2 py-1.5 text-center text-xs" style={{ borderRight:'1px solid #111' }}>Inicio</td>
+                        <td className="px-2 py-1.5 text-right" style={{ borderRight:'1.5px solid #111' }}>0.00</td>
+                        <td className="px-2 py-1.5 text-center text-xs" style={{ borderRight:'1px solid #111' }}>Final</td>
+                        <td className="px-2 py-1.5 text-right">{corte.toFixed(2)}</td>
+                      </tr>
                       {[['A','D'],['B','E'],['C','F']].map(([l, r]) => (
                         <tr key={l} style={{ borderBottom: '1px solid #e5e5e5' }}>
                           <td className="px-2 py-1.5 text-center font-black" style={{ borderRight:'1px solid #111' }}>{l}</td>
@@ -717,7 +832,7 @@ export default function App() {
                   <div className="text-[9px] font-mono text-gray-400 mt-1">
                     Perímetro pack: {perimetro.toFixed(2)} mm
                   </div>
-                  <div className={`text-[9px] font-mono mt-0.5 font-bold ${solape > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className="text-[9px] font-mono mt-0.5 font-bold" style={{ color: solape > 0 ? '#ea580c' : '#9ca3af' }}>
                     Solape S/SS: {solape.toFixed(2)} mm ({solapeLado.toFixed(2)} mm c/lado)
                   </div>
                 </div>
@@ -741,9 +856,8 @@ export default function App() {
                       ))}
                       {/* film principal */}
                       <path d={sideFilmPath} fill="none" stroke="#E61C24" strokeWidth="2.5" strokeLinejoin="round" />
-                      {/* solape: tramos punteados desde A y F hacia S/SS */}
-                      <path d={solapePathL} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
-                      <path d={solapePathR} fill="none" stroke="#E61C24" strokeWidth="2" strokeDasharray="4,3" />
+                      {/* solape: segunda capa de film centrada en S/SS */}
+                      {solapeVisible > 0 && <path d={solapePath} fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round" />}
                       {/* puntos A–F */}
                       {sidePoints.map(([l, cx, cy, side]) => (
                         <g key={l}>
@@ -754,7 +868,7 @@ export default function App() {
                       ))}
                       {/* S/SS: punto de sellado en el centro del fondo */}
                       <circle cx={ladoTop/2} cy={alt} r="4" fill="#059669" />
-                      <text x={ladoTop/2} y={alt + 16} fill="#059669" fontSize="9"
+                      <text x={ladoTop/2} y={alt + 20} fill="#059669" fontSize="9"
                         textAnchor="middle" fontFamily="monospace" fontWeight="bold">S/SS</text>
                     </svg>
                   </div>
@@ -829,13 +943,10 @@ export default function App() {
                 <div className="viewer-3d-header">
                   <div>
                     <span className="viewer-3d-kicker">Visualizador interactivo</span>
-                    <h3>Pack 3D con film termocontraíble</h3>
-                    <p>Arrastrá para rotar. En modo CON ARTE, la imagen se envuelve siguiendo el perfil A-F y termina en S/SS.</p>
+                    <h3>Pack 3D: antes y después del horno</h3>
+                    <p>Arrastrá para rotar. Mové la barra de contracción para ver cómo el film se pega al pack y las orejas se cierran sobre el lado A.</p>
                   </div>
                   <div className="viewer-3d-actions">
-                    <button type="button" className="viewer-button-secondary" onClick={() => setReset3DToken((value) => value + 1)} disabled={!geometry3D}>
-                      Restablecer vista
-                    </button>
                     <button type="button" className="viewer-button-primary" onClick={updateGeometry3D} disabled={warnings.some((warning) => warning.includes('altura') || warning.includes('diámetro') || warning.includes('disposición'))}>
                       {geometry3D ? 'Actualizar geometría 3D' : 'Generar modelo 3D'}
                     </button>
@@ -848,26 +959,46 @@ export default function App() {
                     <span>{arteImagen ? `${arteNombre} · ${arteLargo.toFixed(1)} × ${arteAncho.toFixed(1)} mm` : 'Cargá una imagen en Material > Con arte.'}</span>
                   </div>
                 )}
-                <div className="viewer-measure-controls">
-                  <div>
-                    <strong>Cotas del perfil</strong>
-                    <span>A-F se toman directamente del Mapeo del diseño.</span>
+
+                <div className="viewer-shrink-controls">
+                  <div className="viewer-shrink-toggle">
+                    <button type="button" className={contraccion3D === 0 ? 'active' : ''} onClick={() => setContraccion3D(0)}>Antes del horno</button>
+                    <button type="button" className={contraccion3D === 100 ? 'active' : ''} onClick={() => setContraccion3D(100)}>Después del horno</button>
                   </div>
-                  <label>
-                    <span>Solape S/SS</span>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        max={(dia / 2).toFixed(1)}
-                        step="1"
-                        value={solape3D}
-                        onChange={(event) => setSolape3D(+event.target.value)}
-                      />
-                      <b>mm</b>
-                    </div>
-                    <small>Referencia: 10 mm. Máximo sugerido: {(dia / 2).toFixed(1)} mm.</small>
+                  <label className="viewer-shrink-slider">
+                    <span>Contracción aplicada: <strong>{contraccion3D}%</strong></span>
+                    <input type="range" min="0" max="100" step="1" value={contraccion3D} onChange={(event) => setContraccion3D(+event.target.value)} />
                   </label>
+                  <div className="viewer-shrink-stats">
+                    <span>Borde oreja <strong>{(simActual.contraccionBorde * 100).toFixed(1)}%</strong></span>
+                    <span>Transversal <strong>{(simActual.contraccionTD * 100).toFixed(1)}%</strong></span>
+                    <span>Hueco <strong>{(simActual.ratioHueco * 100).toFixed(1)}%</strong></span>
+                  </div>
+                </div>
+
+                <div className="viewer-layer-controls">
+                  <span>Mostrar:</span>
+                  {[
+                    ['mapeo', 'Mapeo del diseño', 'layer-mapeo'],
+                    ['solape', 'Solape', 'layer-solape'],
+                    ['orejas', 'Orejas sup / inf', 'layer-orejas'],
+                  ].map(([key, label, clase]) => (
+                    <button key={key} type="button" className={`${clase} ${capas3D[key] ? 'active' : ''}`} aria-pressed={capas3D[key]}
+                      onClick={() => setCapas3D((actual) => ({ ...actual, [key]: !actual[key] }))}>
+                      {capas3D[key] ? '●' : '○'} {label}
+                    </button>
+                  ))}
+                  <span className="viewer-layer-sep">Vista:</span>
+                  {[
+                    ['iso', 'Perspectiva'],
+                    ['frente', 'Lado A'],
+                    ['abajo', 'Desde abajo'],
+                  ].map(([key, label]) => (
+                    <button key={key} type="button" disabled={!geometry3D}
+                      onClick={() => { setVista3D(key); setReset3DToken((value) => value + 1); }}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
                 {geometry3DDirty && geometry3D && (
@@ -875,7 +1006,7 @@ export default function App() {
                 )}
 
                 {geometry3D ? (
-                  <Pack3D geometry={geometry3D} resetToken={reset3DToken} />
+                  <Pack3D geometry={geometry3D} resetToken={reset3DToken} vista={vista3D} contraccion={contraccion3D / 100} capas={capas3D} />
                 ) : (
                   <div className="viewer-3d-empty">
                     <div className="viewer-3d-icon">3D</div>
