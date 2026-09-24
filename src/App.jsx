@@ -86,9 +86,11 @@ export default function App() {
   const [geometry3D, setGeometry3D] = useState(null);
   const [geometry3DDirty, setGeometry3DDirty] = useState(true);
   const [reset3DToken, setReset3DToken] = useState(0);
-  const [solape3D, setSolape3D] = useState(10);
+  const [modoSolape, setModoSolape] = useState('auto');
+  const [solapeManual, setSolapeManual] = useState(10);
   const [mostrarPuntos3D, setMostrarPuntos3D] = useState(true);
-  const [mostrarMargenes3D, setMostrarMargenes3D] = useState(true);
+  const [mostrarOrejas3D, setMostrarOrejas3D] = useState(true);
+  const [mostrarArte3D, setMostrarArte3D] = useState(true);
   const [arteImagen, setArteImagen] = useState(null);
   const [arteNombre, setArteNombre] = useState('');
   const [arteLargo, setArteLargo] = useState(1049);
@@ -114,7 +116,8 @@ export default function App() {
   const alturaHombro = Math.max(0, alt - altCil);
   const longitudHombro = Math.sqrt(alturaHombro ** 2 + desplazamientoHombro ** 2);
   const perfilGeometrico = anchoPaquete + 2 * altCil + 2 * longitudHombro + anchoTop;
-  const solapeEfectivo = Math.min(Math.max(solape3D, 0), dia / 2);
+  const solapeIdeal = Math.ceil(Math.max(10, dia * 0.15) * 2) / 2;
+  const solapeEfectivo = modoSolape === 'auto' ? solapeIdeal : Math.max(0, Number(solapeManual) || 0);
   const perfilConSolape = perfilGeometrico + solapeEfectivo;
   const largoCorteCalculado = Math.ceil(perfilConSolape / 10) * 10;
   const corte = modoCorte === 'auto' ? largoCorteCalculado : rapport;
@@ -143,7 +146,7 @@ export default function App() {
 
   useEffect(() => {
     setGeometry3DDirty(true);
-  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, solape3D, arteImagen, arteLargo, arteAncho, margenArteSuperior, margenArteInferior]);
+  }, [ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, modoSolape, solapeManual, arteImagen, arteLargo, arteAncho, margenArteSuperior, margenArteInferior]);
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -156,6 +159,8 @@ export default function App() {
     setTipoFilm(p.tipoFilm ?? p.tf ?? 'cristal');
     setModoCorte(p.modoCorte ?? 'auto');
     setOrientacion(p.orientacion ?? 'normal');
+    setModoSolape(p.modoSolape ?? 'auto');
+    setSolapeManual(p.solapeManual ?? 10);
   };
 
   const saveConfig = () => {
@@ -163,7 +168,7 @@ export default function App() {
     const c = {
       n: cfgName, t: new Date().toLocaleDateString('es-AR'),
       ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
-      folienbreite, rapport, tipoFilm, modoCorte, orientacion,
+      folienbreite, rapport, tipoFilm, modoCorte, orientacion, modoSolape, solapeManual,
     };
     const nc = [...configs, c];
     setConfigs(nc);
@@ -189,7 +194,7 @@ export default function App() {
       ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm,
       puntos: pts, largoCorte: corte, solape: solapeEfectivo,
       anchoBobina: folienbreite, anchoCanal: canal, anchoPaquete,
-      margenLateral: oreja,
+      margenLateral: oreja, orejaSuperior: oreja, orejaInferior: oreja,
       arte: tipoFilm === 'arte' && arteImagen ? {
         imagen: arteImagen, nombre: arteNombre, largo: arteLargo, ancho: arteAncho,
         margenSuperior: margenArteSuperior, margenInferior: margenArteInferior,
@@ -203,7 +208,7 @@ export default function App() {
   const packXStart = (corte - ladoTop) / 2;
   const today = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-  const solapePathStart = solapeLado; // alias para SVG
+  const solapePathStart = solapeEfectivo / 2; // alias para SVG
 
   // Perfil lateral: A y F en los bordes del pack (interno), S/SS en el centro del fondo
   // El solape es el tramo extra que va FUERA de A y F (hacia el centro, por debajo)
@@ -224,7 +229,7 @@ export default function App() {
   const sideFilmPath = sideFilmParts.join(' ');
 
   // Tramos de solape (se dibujan separados, punteados, desde A y F hacia el centro)
-  const solapePathL = `M ${ladoTop/2} ${alt} L ${solapeLado} ${alt}`;
+  const solapePathL = `M ${ladoTop/2} ${alt} L ${Math.min(solapeEfectivo / 2, ladoTop / 2)} ${alt}`;
   const solapePathR = `M ${ladoTop - solapeLado} ${alt} L ${ladoTop/2} ${alt}`;
 
   const sidePoints = [
@@ -467,7 +472,7 @@ export default function App() {
                   {
                     label: 'LARGO DE CORTE',
                     value: corte.toFixed(1),
-                    sub:   `${modoCorte === 'auto' ? 'Automático' : 'Manual'} · Perfil ${perfilGeometrico.toFixed(1)} mm`,
+                    sub:   `${modoCorte === 'auto' ? 'Automático' : 'Manual'} · Perfil + solape ${perfilConSolape.toFixed(1)} mm`,
                     accent: false,
                   },
                   {
@@ -660,7 +665,7 @@ export default function App() {
                     Perímetro pack: {perimetro.toFixed(2)} mm
                   </div>
                   <div className={`text-[9px] font-mono mt-0.5 font-bold ${solape > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                    Solape S/SS: {solape.toFixed(2)} mm ({solapeLado.toFixed(2)} mm c/lado)
+                    Solape S/SS: {solapeEfectivo.toFixed(2)} mm ({(solapeEfectivo / 2).toFixed(2)} mm c/lado)
                   </div>
                 </div>
 
@@ -791,23 +796,20 @@ export default function App() {
                   </div>
                   <div className="viewer-visibility-actions">
                     <button type="button" className={mostrarPuntos3D ? 'active' : ''} onClick={() => setMostrarPuntos3D((value) => !value)}>{mostrarPuntos3D ? 'Ocultar puntos A-F' : 'Mostrar puntos A-F'}</button>
-                    <button type="button" className={mostrarMargenes3D ? 'active' : ''} onClick={() => setMostrarMargenes3D((value) => !value)}>{mostrarMargenes3D ? 'Ocultar orejas y márgenes' : 'Mostrar orejas y márgenes'}</button>
+                    <button type="button" className={mostrarOrejas3D ? 'active' : ''} onClick={() => setMostrarOrejas3D((value) => !value)}>{mostrarOrejas3D ? 'Ocultar orejas y huecos' : 'Mostrar orejas y huecos'}</button>
+                    {tipoFilm === 'arte' && <button type="button" className={mostrarArte3D ? 'active' : ''} onClick={() => setMostrarArte3D((value) => !value)}>{mostrarArte3D ? 'Ocultar arte' : 'Mostrar arte'}</button>}
                   </div>
-                  <label>
+                  <div className="overlap-control">
                     <span>Solape S/SS</span>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        max={(dia / 2).toFixed(1)}
-                        step="1"
-                        value={solape3D}
-                        onChange={(event) => setSolape3D(+event.target.value)}
-                      />
-                      <b>mm</b>
-                    </div>
-                    <small>Referencia: 10 mm. Máximo sugerido: {(dia / 2).toFixed(1)} mm.</small>
-                  </label>
+                    <Toggle value={modoSolape} onChange={setModoSolape} options={[{ val:'auto', label:'ÓPTIMO' }, { val:'manual', label:'MANUAL' }]} />
+                    {modoSolape === 'manual' ? (
+                      <div className="overlap-manual-input">
+                        <input type="number" min="0" step="0.5" value={solapeManual} onChange={(event) => setSolapeManual(+event.target.value)} />
+                        <b>mm</b>
+                      </div>
+                    ) : <div className="overlap-auto-value">{solapeIdeal.toFixed(1)} mm</div>}
+                    <small>Sin límite máximo artificial. Modifica largo de corte, A-F y S/SS.</small>
+                  </div>
                 </div>
 
                 {geometry3DDirty && geometry3D && (
@@ -815,7 +817,7 @@ export default function App() {
                 )}
 
                 {geometry3D ? (
-                  <Pack3D geometry={geometry3D} resetToken={reset3DToken} mostrarPuntos={mostrarPuntos3D} mostrarMargenes={mostrarMargenes3D} />
+                  <Pack3D geometry={geometry3D} resetToken={reset3DToken} mostrarPuntos={mostrarPuntos3D} mostrarOrejas={mostrarOrejas3D} mostrarArte={mostrarArte3D} />
                 ) : (
                   <div className="viewer-3d-empty">
                     <div className="viewer-3d-icon">3D</div>
