@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -324,64 +324,21 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
   const camaraRef = useRef(null); // conserva la cámara cuando el modelo se regenera
-  // Un solo renderer (contexto WebGL) mientras el visor está montado. Crear uno nuevo en cada
-  // regeneración agotaba el límite de contextos del navegador y la vista quedaba en negro.
-  const rendererRef = useRef(null);
-  const requestRenderRef = useRef(null); // el "pedido de cuadro" de la escena activa
-  // El navegador puede quitarle el contexto WebGL a la pestaña (pestaña en segundo plano,
-  // poca memoria de video, etc.). Sin este aviso el visor queda en negro para siempre.
-  const [contextoPerdido, setContextoPerdido] = useState(false);
-  const [reintentoToken, setReintentoToken] = useState(0);
-
-  useEffect(() => () => {
-    const renderer = rendererRef.current;
-    if (renderer) {
-      renderer.dispose();
-      renderer.forceContextLoss();
-      rendererRef.current = null;
-    }
-    mountRef.current?.replaceChildren();
-  }, []);
-
-  // Reintentar: fuerza un renderer nuevo si el navegador no restauró el contexto solo.
-  const reintentar = () => {
-    const renderer = rendererRef.current;
-    if (renderer) {
-      renderer.dispose();
-      renderer.forceContextLoss();
-      rendererRef.current = null;
-    }
-    mountRef.current?.replaceChildren();
-    setContextoPerdido(false);
-    setReintentoToken((n) => n + 1);
-  };
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount || !geometry) return undefined;
-    let cerrada = false; // la escena fue reemplazada: callbacks tardíos no deben dibujar
     const width = Math.max(mount.clientWidth, 320);
     const height = Math.max(mount.clientHeight, 420);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#edf4fb');
     const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
-    let renderer = rendererRef.current;
-    if (!renderer) {
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.domElement.addEventListener('webglcontextlost', (event) => {
-        event.preventDefault(); // permite que el navegador lo restaure solo
-        setContextoPerdido(true);
-      });
-      renderer.domElement.addEventListener('webglcontextrestored', () => {
-        setContextoPerdido(false);
-        requestRenderRef.current?.();
-      });
-      rendererRef.current = renderer;
-    }
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
-    if (renderer.domElement.parentNode !== mount) mount.replaceChildren(renderer.domElement);
+    renderer.shadowMap.enabled = true;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    mount.replaceChildren(renderer.domElement);
 
     const renderedDiameter = 0.78;
     const scale = renderedDiameter / geometry.dia;
@@ -413,6 +370,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     scene.add(new THREE.HemisphereLight(0xffffff, 0x718296, 2.4));
     const mainLight = new THREE.DirectionalLight(0xffffff, 3.2);
     mainLight.position.set(5, 9, 6);
+    mainLight.castShadow = true;
     scene.add(mainLight);
 
     const floor = new THREE.Mesh(
@@ -421,6 +379,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.02;
+    floor.receiveShadow = true;
     scene.add(floor);
     const grid = new THREE.GridHelper(16, 16, 0x98a9ba, 0xcbd6e2);
     grid.position.y = -0.015;
@@ -454,6 +413,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
         bottle.add(liquidMesh);
         const body = new THREE.Mesh(new THREE.CylinderGeometry(bodyRadius * 0.985, bodyRadius * 0.985, shoulderStart, 32), glass);
         body.position.y = shoulderStart / 2;
+        body.castShadow = true;
         bottle.add(body);
         const label = new THREE.Mesh(new THREE.CylinderGeometry(bodyRadius * 0.995, bodyRadius * 0.995, shoulderStart * 0.27, 32, 1, true), labelMaterial);
         label.position.y = shoulderStart * 0.58;
@@ -507,14 +467,9 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     });
     if (conArte) {
       createFilmTexture(geometry.arte.imagen, geometry.arte.recorte, geometry.arte.encuadre, Boolean(geometry.arte.invertido), (texture) => {
-        if (cerrada) {
-          texture.dispose();
-          return;
-        }
         const previous = filmMesh.material;
         filmMesh.material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
         previous.dispose();
-        requestRender();
       });
     }
 
@@ -589,55 +544,41 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
 
     controlsRef.current = {
       setView,
-      setContraccion: (t) => {
-        film.update(Math.min(Math.max(t, 0), 1));
-        requestRender();
-      },
+      setContraccion: (t) => film.update(Math.min(Math.max(t, 0), 1)),
       setCapas: ({ mapeo = true, solape: verSolape = true, orejas = true } = {}) => {
         capaMapeo.visible = mapeo;
         capaSolape.visible = verSolape;
         capaOrejas.visible = orejas;
-        requestRender();
       },
     };
 
-    // Se dibuja solo cuando algo cambia (cámara, contracción, capas), no en cada cuadro.
-    let frame = null;
-    function requestRender() {
-      if (!cerrada && frame === null) frame = requestAnimationFrame(renderFrame);
-    }
-    function renderFrame() {
-      frame = null;
-      const moviendo = controls.update();
+    let frame;
+    const render = () => {
+      controls.update();
       renderer.render(scene, camera);
-      if (moviendo) requestRender();
-    }
-    controls.addEventListener('change', requestRender);
-    requestRenderRef.current = requestRender;
-    requestRender();
+      frame = requestAnimationFrame(render);
+    };
+    render();
     const resizeObserver = new ResizeObserver(() => {
       const nextWidth = Math.max(mount.clientWidth, 320);
       const nextHeight = Math.max(mount.clientHeight, 420);
       camera.aspect = nextWidth / nextHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(nextWidth, nextHeight);
-      requestRender();
     });
     resizeObserver.observe(mount);
 
     return () => {
-      cerrada = true;
-      if (frame !== null) cancelAnimationFrame(frame);
-      controls.removeEventListener('change', requestRender);
+      cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       camaraRef.current = { position: camera.position.clone(), target: controls.target.clone() };
       controls.dispose();
       disposeScene(scene);
-      renderer.renderLists.dispose();
+      renderer.dispose();
       controlsRef.current = null;
-      if (requestRenderRef.current === requestRender) requestRenderRef.current = null;
+      mount.replaceChildren();
     };
-  }, [geometry, reintentoToken]);
+  }, [geometry]);
 
   useEffect(() => {
     controlsRef.current?.setContraccion(contraccion);
@@ -651,16 +592,5 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     if (resetToken > 0) controlsRef.current?.setView(vista);
   }, [resetToken, vista]);
 
-  return (
-    <div className="pack-3d-canvas-wrap">
-      <div ref={mountRef} className="pack-3d-canvas" aria-label="Visualizador 3D del pack con film, orejas y solape" />
-      {contextoPerdido && (
-        <div className="pack-3d-lost">
-          <strong>El visor 3D perdió la conexión con la placa de video</strong>
-          <span>Suele recuperarse solo en un momento. Si no, probá recargarlo.</span>
-          <button type="button" onClick={reintentar}>Recargar visor</button>
-        </div>
-      )}
-    </div>
-  );
+  return <div ref={mountRef} className="pack-3d-canvas" aria-label="Visualizador 3D del pack con film, orejas y solape" />;
 }
