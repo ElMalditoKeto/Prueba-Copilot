@@ -336,3 +336,29 @@ body {
 .fila-usar { padding: 4px 10px; border: 1px solid #cfe0ff; border-radius: 999px; background: #fff; color: #275bcb; font-size: 9px; font-weight: 800; }
 .fila-usar:hover { background: #f3f7ff; }
 @media (max-width: 620px) { .bobina-header-side { align-items: flex-start; } }
+
+/* Arte: tramos del plano y vista previa */
+.art-plano-card { display: grid; gap: 8px; padding: 10px; border: 1px solid #ead4d5; border-radius: 14px; background: #fff; }
+.art-plano-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.art-plano-title strong { color: #7a4950; font-size: 9px; }
+.art-plano-title button { padding: 3px 8px; border: 1px solid #e61c24; border-radius: 999px; background: #fff; color: #c71920; font-size: 8px; font-weight: 800; }
+.art-plano-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.art-plano-grid label { display: flex; flex-direction: column; gap: 2px; }
+.art-plano-grid span { color: #7b6670; font-size: 8px; font-weight: 800; }
+.art-plano-grid input { width: 100%; border: 1px solid #ead4d5; border-radius: 8px; padding: 5px 7px; font-size: 11px; font-weight: 750; outline: 0; }
+.art-plano-grid input:focus { border-color: #e61c24; }
+.art-plano-grid small { color: #a08890; font-size: 7px; }
+.arte-preview { padding: 14px 22px; border-bottom: 1px solid #e4eaf1; background: #fbfcfd; }
+.arte-preview-frame { position: relative; width: 100%; overflow: hidden; border: 1px solid #cfd8e3; background: repeating-conic-gradient(#eef2f6 0% 25%, #fff 0% 50%) 50% / 16px 16px; }
+.arte-preview-frame img { position: absolute; max-width: none; object-fit: fill; }
+.arte-preview-printed { position: absolute; border: 1.5px dashed #0e1729; box-shadow: 0 0 0 9999px rgba(255,255,255,.6); pointer-events: none; }
+.arte-preview-knot { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px solid #e61c24; pointer-events: none; }
+.arte-preview-knot.extremo { border-left-style: dashed; border-left-color: #059669; }
+.arte-preview-knot span { position: absolute; top: 3px; left: 3px; padding: 1px 5px; border-radius: 6px; background: #e61c24; color: #fff; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.arte-preview-knot.extremo span { background: #059669; }
+.arte-preview-knot:last-child span { left: auto; right: 3px; }
+.arte-preview-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 7px; color: #6f7b8e; font-size: 9px; }
+.arte-preview-legend i { display: inline-block; width: 12px; height: 0; margin-right: 4px; vertical-align: middle; }
+.legend-knot { border-top: 2px solid #e61c24; }
+.legend-printed { border-top: 2px dashed #0e1729; }
+.arte-preview-img { position: absolute; inset: 0; overflow: hidden; }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Pack3D from './Pack3D';
 import BobinaOptima from './BobinaOptima';
+import ArtePreview from './ArtePreview';
 import { facePolygon, simularOreja, evaluarEstructura, analizarBobina } from './shrinkModel';
 
 // ─── SMALL COMPONENTS ──────────────────────────────────────────────────────────
@@ -104,6 +105,9 @@ export default function App() {
   const [arteOffset, setArteOffset] = useState(0);
   const [arteInvertido, setArteInvertido] = useState(false);
   const [arteRecorte, setArteRecorte] = useState({ izquierda: 11.4, derecha: 11.4, superior: 11.5, inferior: 12 });
+  const [arteEncuadre, setArteEncuadre] = useState({ izquierda: 0, derecha: 0, superior: 0, inferior: 0 });
+  const [arteMapeo, setArteMapeo] = useState('calculado'); // calculado | plano
+  const [arteTramos, setArteTramos] = useState(null);      // tramos del plano: Inicio-A … F-Final (mm)
 
   // ── CÁLCULOS ──
   // La orientación define qué cantidad queda sobre el ancho de bobina.
@@ -154,6 +158,19 @@ export default function App() {
   const ptE = ptD + longitudHombro;
   const ptF = ptE + altCil;
   const pts = { A: ptA, B: ptB, C: ptC, D: ptD, E: ptE, F: ptF };
+
+  // ── ARTE: posiciones Inicio-A-B-C-D-E-F-Final en el film (calculadas) y en el plano ──
+  const knotsGeo = [0, ptA, ptB, ptC, ptD, ptE, ptF, corte];
+  const tramosCalculados = knotsGeo.slice(1).map((k, i) => k - knotsGeo[i]);
+  const usarPlano = arteMapeo === 'plano' && arteTramos;
+  const arteLargoEfectivo = usarPlano ? arteTramos.reduce((a, b) => a + b, 0) : arteLargo;
+  const knotsPlano = usarPlano
+    ? arteTramos.reduce((acc, tramo) => [...acc, acc[acc.length - 1] + tramo], [0])
+    : knotsGeo.map((k) => (corte > 0 ? (k * arteLargo) / corte : k));
+  const elegirMapeoArte = (modo) => {
+    if (modo === 'plano' && !arteTramos) setArteTramos(tramosCalculados.map((t) => Math.round(t * 10) / 10));
+    setArteMapeo(modo);
+  };
 
   // Alias usados por los planos SVG existentes.
   const ladoLargo = anchoPaquete;
@@ -226,15 +243,18 @@ export default function App() {
       arte: tipoFilm === 'arte' && arteImagen ? {
         imagen: arteImagen,
         nombre: arteNombre,
-        largo: arteLargo,
+        largo: arteLargoEfectivo,
         ancho: arteAncho,
+        knotsGeo,
+        knotsPlano,
         offset: arteOffset,
         invertido: arteInvertido,
         recorte: arteRecorte,
+        encuadre: arteEncuadre,
       } : null,
     };
     // pts no va en las dependencias: se recalcula de los mismos datos (disposición y corte).
-  }, [geometryValida, ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, corte, folienbreite, oreja, simActual, arteImagen, arteNombre, arteLargo, arteAncho, arteOffset, arteInvertido, arteRecorte]);
+  }, [geometryValida, ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, corte, folienbreite, oreja, simActual, arteImagen, arteNombre, arteLargoEfectivo, arteAncho, arteOffset, arteInvertido, arteRecorte, arteEncuadre, arteMapeo, arteTramos]);
 
   useEffect(() => {
     if (!geometriaActual) return undefined;
@@ -255,6 +275,8 @@ export default function App() {
     setModoCorte(p.modoCorte ?? 'auto');
     setOrientacion(p.orientacion ?? 'normal');
     setSolapeDeseado(p.solape ?? 50);
+    setArteMapeo(p.arteMapeo ?? 'calculado');
+    setArteTramos(p.arteTramos ?? null);
     setContraccionMD(p.contraccionMD ?? 50);
     setContraccionTD(p.contraccionTD ?? 20);
     setHuecoObjetivo(p.huecoObjetivo ?? 35);
@@ -267,6 +289,7 @@ export default function App() {
       n: cfgName, t: new Date().toLocaleDateString('es-AR'),
       ladoA, ladoB, dia, alt, altCil, tapa, micron, canales,
       folienbreite, rapport, tipoFilm, modoCorte, orientacion,
+      arteMapeo, arteTramos,
       modoBobina, solape: solapeDeseado, contraccionMD, contraccionTD, huecoObjetivo, huecoMaximo,
     };
     const nc = [...configs, c];
@@ -553,7 +576,7 @@ export default function App() {
                     <div className="art-config-card">
                       <div className="art-config-title">
                         <strong>Arte del film</strong>
-                        <span>La imagen se proyecta siguiendo Inicio-A-B-C-D-E-F-Final.</span>
+                        <span>La imagen es el plano completo del film (Inicio→Final). Cada tramo del plano se proyecta sobre su tramo del pack.</span>
                       </div>
 
                       <label className="art-upload-button">
@@ -565,12 +588,39 @@ export default function App() {
 
                       <div className="art-dimensions-grid">
                         <Field label="Largo del arte (mm)">
-                          <input type="number" step="0.5" value={arteLargo} onChange={e => setArteLargo(+e.target.value)} className={inp} />
+                          {usarPlano
+                            ? <input type="number" value={arteLargoEfectivo.toFixed(1)} readOnly className={`${inp} bg-gray-100`} title="Suma de los tramos del plano" />
+                            : <input type="number" step="0.5" value={arteLargo} onChange={e => setArteLargo(+e.target.value)} className={inp} />}
                         </Field>
                         <Field label="Ancho del arte (mm)">
                           <input type="number" step="0.5" value={arteAncho} onChange={e => setArteAncho(+e.target.value)} className={inp} />
                         </Field>
                       </div>
+
+                      <Field label="Mapeo del arte">
+                        <Toggle value={arteMapeo} onChange={elegirMapeoArte} options={[
+                          { val:'calculado', label:'CALCULADO' },
+                          { val:'plano', label:'SEGÚN PLANO' },
+                        ]} />
+                      </Field>
+                      {usarPlano && (
+                        <div className="art-plano-card">
+                          <div className="art-plano-title">
+                            <strong>Tramos del plano (mm)</strong>
+                            <button type="button" onClick={() => setArteTramos(tramosCalculados.map((t) => Math.round(t * 10) / 10))}>Copiar calculados</button>
+                          </div>
+                          <div className="art-plano-grid">
+                            {['Inicio–A', 'A–B', 'B–C', 'C–D', 'D–E', 'E–F', 'F–Final'].map((label, i) => (
+                              <label key={label}>
+                                <span>{label}</span>
+                                <input type="number" step="0.5" min="0" value={arteTramos[i]}
+                                  onChange={(event) => setArteTramos((actual) => actual.map((v, j) => (j === i ? +event.target.value : v)))} />
+                                <small>calc. {tramosCalculados[i].toFixed(1)}</small>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <Field label="Desplazamiento horizontal (mm)">
                         <input type="number" step="1" value={arteOffset} onChange={e => setArteOffset(+e.target.value)} className={inp} />
@@ -583,7 +633,24 @@ export default function App() {
                       />
 
                       <details className="art-crop-details">
-                        <summary>Ajustar recorte de la imagen</summary>
+                        <summary>Encuadre: bordes de la imagen que no son film</summary>
+                        <div className="art-crop-grid">
+                          {[['izquierda', 'Izquierda'], ['derecha', 'Derecha'], ['superior', 'Superior'], ['inferior', 'Inferior']].map(([key, label]) => (
+                            <label key={key}>
+                              <span>{label}</span>
+                              <div>
+                                <input type="number" min="0" max="45" step="0.1" value={arteEncuadre[key]}
+                                  onChange={(event) => setArteEncuadre((current) => ({ ...current, [key]: +event.target.value }))} />
+                                <b>%</b>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="orientation-help">Recortá reglas y cotas hasta que la imagen sea exactamente el film (Inicio→Final).</div>
+                      </details>
+
+                      <details className="art-crop-details">
+                        <summary>Zona impresa del plano (recorte)</summary>
                         <div className="art-crop-grid">
                           {[
                             ['izquierda', 'Izquierda'],
@@ -609,13 +676,13 @@ export default function App() {
                         </div>
                       </details>
 
-                      <div className={`art-match-status ${Math.abs(arteLargo - corte) <= 1 ? 'ok' : 'warning'}`}>
-                        <strong>{Math.abs(arteLargo - corte) <= 1 ? 'Largo compatible' : 'Revisar largo del arte'}</strong>
-                        <span>Arte: {arteLargo.toFixed(1)} mm · Corte: {corte.toFixed(1)} mm · Diferencia: {(arteLargo - corte).toFixed(1)} mm</span>
+                      <div className={`art-match-status ${Math.abs(arteLargoEfectivo - corte) <= 1 ? 'ok' : 'warning'}`}>
+                        <strong>{Math.abs(arteLargoEfectivo - corte) <= 1 ? 'Largo compatible' : 'Revisar largo del arte'}</strong>
+                        <span>Arte: {arteLargoEfectivo.toFixed(1)} mm · Corte: {corte.toFixed(1)} mm · Diferencia: {(arteLargoEfectivo - corte).toFixed(1)} mm</span>
                       </div>
-                      <div className={`art-match-status ${Math.abs(arteAncho - folienbreite) <= 1 ? 'ok' : 'warning'}`}>
-                        <strong>{Math.abs(arteAncho - folienbreite) <= 1 ? 'Ancho compatible' : 'Revisar ancho del arte'}</strong>
-                        <span>Arte: {arteAncho.toFixed(1)} mm · Bobina: {folienbreite.toFixed(1)} mm · Diferencia: {(arteAncho - folienbreite).toFixed(1)} mm</span>
+                      <div className={`art-match-status ${Math.abs(arteAncho - canal) <= 1 ? 'ok' : 'warning'}`}>
+                        <strong>{Math.abs(arteAncho - canal) <= 1 ? 'Ancho compatible' : 'Revisar ancho del arte'}</strong>
+                        <span>Arte: {arteAncho.toFixed(1)} mm · {canales > 1 ? 'Canal' : 'Bobina'}: {canal.toFixed(1)} mm · Diferencia: {(arteAncho - canal).toFixed(1)} mm</span>
                       </div>
                     </div>
                   )}
@@ -996,8 +1063,20 @@ export default function App() {
                 {tipoFilm === 'arte' && (
                   <div className={`viewer-art-status ${arteImagen ? 'ready' : 'missing'}`}>
                     <strong>{arteImagen ? 'Arte cargado' : 'Falta cargar el arte'}</strong>
-                    <span>{arteImagen ? `${arteNombre} · ${arteLargo.toFixed(1)} × ${arteAncho.toFixed(1)} mm` : 'Cargá una imagen en Material > Con arte.'}</span>
+                    <span>{arteImagen ? `${arteNombre} · ${arteLargoEfectivo.toFixed(1)} × ${arteAncho.toFixed(1)} mm · mapeo ${usarPlano ? 'según plano' : 'calculado'}` : 'Cargá una imagen en Material > Con arte.'}</span>
                   </div>
+                )}
+                {tipoFilm === 'arte' && arteImagen && (
+                  <ArtePreview
+                    imagen={arteImagen}
+                    largo={arteLargoEfectivo}
+                    ancho={arteAncho}
+                    recorte={arteRecorte}
+                    encuadre={arteEncuadre}
+                    knotsPlano={knotsPlano}
+                    offset={arteOffset}
+                    invertido={arteInvertido}
+                  />
                 )}
 
                 <div className="viewer-shrink-controls">

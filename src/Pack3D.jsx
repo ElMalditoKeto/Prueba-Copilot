@@ -138,37 +138,68 @@ function rayToPolygon(center, point, poly) {
   return { x: center.x + dx * best, y: center.y + dy * best };
 }
 
-function createCroppedTexture(imageUrl, crop, invertido, onReady) {
+// Textura del film completo (Inicio→Final × ancho del arte). El recorte marca la zona
+// impresa: se deja en su posición real y lo que queda afuera es film transparente.
+function createFilmTexture(imageUrl, crop, encuadre, invertido, onReady) {
   const image = new Image();
   image.onload = () => {
-    const left = Math.max(0, Math.min(45, crop?.izquierda ?? 0)) / 100;
-    const right = Math.max(0, Math.min(45, crop?.derecha ?? 0)) / 100;
-    const top = Math.max(0, Math.min(45, crop?.superior ?? 0)) / 100;
-    const bottom = Math.max(0, Math.min(45, crop?.inferior ?? 0)) / 100;
-    const sourceX = image.width * left;
-    const sourceY = image.height * top;
-    const sourceWidth = image.width * Math.max(0.05, 1 - left - right);
-    const sourceHeight = image.height * Math.max(0.05, 1 - top - bottom);
+    const pct = (value) => Math.max(0, Math.min(45, value ?? 0)) / 100;
+    const left = pct(crop?.izquierda);
+    const right = pct(crop?.derecha);
+    const top = pct(crop?.superior);
+    const bottom = pct(crop?.inferior);
+    // Encuadre: bordes de la imagen que no son film (reglas, cotas del plano).
+    const fx = image.width * pct(encuadre?.izquierda);
+    const fy = image.height * pct(encuadre?.superior);
+    const fw = image.width * Math.max(0.1, 1 - pct(encuadre?.izquierda) - pct(encuadre?.derecha));
+    const fh = image.height * Math.max(0.1, 1 - pct(encuadre?.superior) - pct(encuadre?.inferior));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(512, Math.round(sourceWidth));
-    canvas.height = Math.max(256, Math.round(sourceHeight));
+    canvas.width = Math.min(4096, Math.max(1024, Math.round(fw)));
+    canvas.height = Math.max(256, Math.round((canvas.width * fh) / fw));
     const context = canvas.getContext('2d');
     context.save();
     if (invertido) {
       context.translate(canvas.width, 0);
       context.scale(-1, 1);
     }
-    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+    context.drawImage(image, fx, fy, fw, fh, 0, 0, canvas.width, canvas.height);
     context.restore();
+    const W = canvas.width;
+    const H = canvas.height;
+    const x0 = Math.round(W * left);
+    const x1 = Math.round(W * (1 - right));
+    const y0 = Math.round(H * top);
+    const y1 = Math.round(H * (1 - bottom));
+    // Fuera de la zona impresa (y un borde de 1 px) queda transparente.
+    context.clearRect(0, 0, W, Math.max(1, y0));
+    context.clearRect(0, Math.min(H - 1, y1), W, H);
+    context.clearRect(0, 0, Math.max(1, x0), H);
+    context.clearRect(Math.min(W - 1, x1), 0, W, H);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.anisotropy = 8;
     texture.needsUpdate = true;
     onReady(texture);
   };
   image.src = imageUrl;
+}
+
+// Lleva una posición del film (mm desde Inicio) a la posición equivalente del plano,
+// tramo por tramo: Inicio-A, A-B, … F-Final.
+function mapearAlPlano(arc, knotsGeo, knotsPlano) {
+  if (!knotsGeo || !knotsPlano || knotsGeo.length !== knotsPlano.length) return arc;
+  const n = knotsGeo.length;
+  if (arc <= knotsGeo[0]) return knotsPlano[0] + (arc - knotsGeo[0]);
+  for (let i = 1; i < n; i += 1) {
+    if (arc <= knotsGeo[i]) {
+      const span = knotsGeo[i] - knotsGeo[i - 1];
+      const t = span > 1e-9 ? (arc - knotsGeo[i - 1]) / span : 0;
+      return knotsPlano[i - 1] + t * (knotsPlano[i] - knotsPlano[i - 1]);
+    }
+  }
+  return knotsPlano[n - 1] + (arc - knotsGeo[n - 1]);
 }
 
 // Malla del film: recorrido del corte (arco) × ancho de bobina (cuerpo + orejas).
@@ -215,8 +246,9 @@ function createFilm({ loop, corte, solape, profundidad, oreja, hueco, scale, art
   for (let i = 0; i < nA; i += 1) {
     for (let j = 0; j < nW; j += 1) {
       const k = i * nW + j;
-      uvs[k * 2] = (arcs[i] + offset) / artLength;
-      uvs[k * 2 + 1] = 0.5 + ws[j] / artWidth;
+      uvs[k * 2] = (mapearAlPlano(arcs[i], arte?.knotsGeo, arte?.knotsPlano) + offset) / artLength;
+      // Signo negativo: el arte se lee derecho visto desde afuera del pack.
+      uvs[k * 2 + 1] = 0.5 - ws[j] / artWidth;
     }
   }
   const indices = [];
@@ -434,7 +466,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
       pack.add(line);
     });
     if (conArte) {
-      createCroppedTexture(geometry.arte.imagen, geometry.arte.recorte, Boolean(geometry.arte.invertido), (texture) => {
+      createFilmTexture(geometry.arte.imagen, geometry.arte.recorte, geometry.arte.encuadre, Boolean(geometry.arte.invertido), (texture) => {
         const previous = filmMesh.material;
         filmMesh.material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
         previous.dispose();
