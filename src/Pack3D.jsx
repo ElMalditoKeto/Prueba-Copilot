@@ -324,21 +324,40 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
   const mountRef = useRef(null);
   const controlsRef = useRef(null);
   const camaraRef = useRef(null); // conserva la cámara cuando el modelo se regenera
+  // Un solo renderer (contexto WebGL) mientras el visor está montado. Crear uno nuevo en cada
+  // regeneración agotaba el límite de contextos del navegador y la vista quedaba en negro.
+  const rendererRef = useRef(null);
+
+  useEffect(() => () => {
+    const renderer = rendererRef.current;
+    if (renderer) {
+      renderer.dispose();
+      renderer.forceContextLoss();
+      rendererRef.current = null;
+    }
+    mountRef.current?.replaceChildren();
+  }, []);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount || !geometry) return undefined;
+    let cerrada = false; // la escena fue reemplazada: callbacks tardíos no deben dibujar
     const width = Math.max(mount.clientWidth, 320);
     const height = Math.max(mount.clientHeight, 420);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#edf4fb');
     const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    let renderer = rendererRef.current;
+    if (!renderer) {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.domElement.addEventListener('webglcontextlost', (event) => event.preventDefault());
+      rendererRef.current = renderer;
+    }
     renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    mount.replaceChildren(renderer.domElement);
+    if (renderer.domElement.parentNode !== mount) mount.replaceChildren(renderer.domElement);
 
     const renderedDiameter = 0.78;
     const scale = renderedDiameter / geometry.dia;
@@ -467,6 +486,10 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     });
     if (conArte) {
       createFilmTexture(geometry.arte.imagen, geometry.arte.recorte, geometry.arte.encuadre, Boolean(geometry.arte.invertido), (texture) => {
+        if (cerrada) {
+          texture.dispose();
+          return;
+        }
         const previous = filmMesh.material;
         filmMesh.material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
         previous.dispose();
@@ -560,7 +583,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     // Se dibuja solo cuando algo cambia (cámara, contracción, capas), no en cada cuadro.
     let frame = null;
     function requestRender() {
-      if (frame === null) frame = requestAnimationFrame(renderFrame);
+      if (!cerrada && frame === null) frame = requestAnimationFrame(renderFrame);
     }
     function renderFrame() {
       frame = null;
@@ -581,15 +604,15 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     resizeObserver.observe(mount);
 
     return () => {
+      cerrada = true;
       if (frame !== null) cancelAnimationFrame(frame);
       controls.removeEventListener('change', requestRender);
       resizeObserver.disconnect();
       camaraRef.current = { position: camera.position.clone(), target: controls.target.clone() };
       controls.dispose();
       disposeScene(scene);
-      renderer.dispose();
+      renderer.renderLists.dispose();
       controlsRef.current = null;
-      mount.replaceChildren();
     };
   }, [geometry]);
 

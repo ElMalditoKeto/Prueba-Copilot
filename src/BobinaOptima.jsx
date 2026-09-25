@@ -14,7 +14,10 @@ export function EstadoChip({ estado }) {
 
 const fmt = (valor, dec = 1) => (valor === null || valor === undefined ? '—' : Number(valor).toFixed(dec));
 
-function CurvaBobina({ analisis, bobinaActual, huecoObjetivo, huecoMaximo, onElegir }) {
+function CurvaBobina({ analisis, bobinaActual, huecoObjetivo: objetivoCrudo, huecoMaximo: maximoCrudo, onElegir }) {
+  // Zonas siempre ordenadas y dentro de 0-100 aunque los datos estén a medio escribir.
+  const huecoObjetivo = Math.min(100, Math.max(0, objetivoCrudo));
+  const huecoMaximo = Math.min(100, Math.max(huecoObjetivo, maximoCrudo));
   const [hover, setHover] = useState(null);
   const arrastrando = useRef(false);
   const { bobinaMax, bobinaMin, bobinaRecomendada } = analisis;

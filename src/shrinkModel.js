@@ -148,7 +148,9 @@ export function analizarBobina({ face, anchoPaquete, canales, contraccionMD, con
   let orejaMin = null;
   let orejaRecomendada = null;
   let orejaExceso = null;
-  for (let oreja = 0; oreja <= maxOreja + EPS; oreja += 1) {
+  // Paso de 1 mm, o más grueso en packs muy altos, para no pasar de ~600 simulaciones.
+  const paso = Math.max(1, Math.ceil(maxOreja / 600));
+  for (let oreja = 0; oreja <= maxOreja + EPS; oreja += paso) {
     const sim = simularOreja({ face, oreja, contraccionMD, contraccionTD });
     const pct = sim.ratioHueco * 100;
     curva.push({ oreja, bobina: (anchoPaquete + 2 * oreja) * canales, hueco: pct });

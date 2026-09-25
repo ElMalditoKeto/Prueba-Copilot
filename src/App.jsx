@@ -476,30 +476,30 @@ export default function App() {
                   </Field>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Botellas del lado A">
-                      <NumberInput value={ladoA} onChange={setLadoA} className={inp} />
+                      <NumberInput min="1" max="30" value={ladoA} onChange={setLadoA} className={inp} />
                     </Field>
                     <Field label="Botellas del lado B">
-                      <NumberInput value={ladoB} onChange={setLadoB} className={inp} />
+                      <NumberInput min="1" max="30" value={ladoB} onChange={setLadoB} className={inp} />
                     </Field>
                   </div>
                   <Field label="Diámetro de botella (mm)">
-                    <NumberInput step="0.1" value={dia} onChange={setDia} className={inp} />
+                    <NumberInput step="0.1" min="1" max="400" value={dia} onChange={setDia} className={inp} />
                     <div className="text-[7px] font-mono text-gray-400 mt-0.5 leading-tight">
                       diámetro mayor = distancia entre centros
                     </div>
                   </Field>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Altura total (mm)">
-                      <NumberInput step="0.1" value={alt} onChange={setAlt} className={inp} />
+                      <NumberInput step="0.1" min="1" max="1500" value={alt} onChange={setAlt} className={inp} />
                     </Field>
                     <Field label="Altura del cuerpo recto (mm)">
-                      <NumberInput step="0.1" value={altCil}
+                      <NumberInput step="0.1" min="0" max="1500" value={altCil}
                         onChange={setAltCil}
                         className={altCil > alt ? `${inp} border-red-500 bg-red-50` : inp} />
                     </Field>
                   </div>
                   <Field label="Diámetro de tapa (mm)">
-                    <NumberInput step="0.1" value={tapa} onChange={setTapa} className={inpRed} />
+                    <NumberInput step="0.1" min="1" max="400" value={tapa} onChange={setTapa} className={inpRed} />
                   </Field>
                 </div>
               </div>
@@ -519,7 +519,7 @@ export default function App() {
                   </Field>
                   {modoBobina === 'manual' ? (
                     <Field label="Ancho total de bobina (mm)">
-                      <NumberInput step="0.5" value={bobinaManual} onChange={setBobinaManual} className={inpAmber} />
+                      <NumberInput step="0.5" min="1" max="5000" value={bobinaManual} onChange={setBobinaManual} className={inpAmber} />
                     </Field>
                   ) : (
                     <div className="calculated-hint">
@@ -540,14 +540,14 @@ export default function App() {
                   {modoCorte === 'manual' ? (
                     <>
                       <Field label="Largo de corte manual (mm)">
-                        <NumberInput step="0.5" value={rapport} onChange={setRapport} className={inpAmber} />
+                        <NumberInput step="0.5" min="1" max="10000" value={rapport} onChange={setRapport} className={inpAmber} />
                       </Field>
                       <div className="calculated-hint">Solape resultante: <strong>{diferenciaCorte.toFixed(1)} mm</strong><span>Perfil geométrico: {perfilGeometrico.toFixed(1)} mm</span></div>
                     </>
                   ) : (
                     <>
                       <Field label="Solape S/SS (mm)">
-                        <NumberInput step="1" min="0" value={solapeDeseado} onChange={setSolapeDeseado} className={inpAmber} />
+                        <NumberInput step="1" min="0" max="500" value={solapeDeseado} onChange={setSolapeDeseado} className={inpAmber} />
                       </Field>
                       <div className="calculated-hint">Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong><span>Perfil {perfilGeometrico.toFixed(1)} mm + solape {solapeDeseado.toFixed(1)} mm</span></div>
                     </>
@@ -571,7 +571,7 @@ export default function App() {
                     options={[{ val:'cristal', label:'CRISTAL' }, { val:'arte', label:'CON ARTE' }]}
                   />
                   <Field label="Espesor Film (µm)">
-                    <NumberInput value={micron} onChange={setMicron} className={inp} />
+                    <NumberInput min="1" max="500" value={micron} onChange={setMicron} className={inp} />
                   </Field>
                   {tipoFilm === 'arte' && (
                     <div className="art-config-card">
@@ -591,10 +591,10 @@ export default function App() {
                         <Field label="Largo del arte (mm)">
                           {usarPlano
                             ? <input type="number" value={arteLargoEfectivo.toFixed(1)} readOnly className={`${inp} bg-gray-100`} title="Suma de los tramos del plano" />
-                            : <NumberInput step="0.5" value={arteLargo} onChange={setArteLargo} className={inp} />}
+                            : <NumberInput step="0.5" min="1" max="10000" value={arteLargo} onChange={setArteLargo} className={inp} />}
                         </Field>
                         <Field label="Ancho del arte (mm)">
-                          <NumberInput step="0.5" value={arteAncho} onChange={setArteAncho} className={inp} />
+                          <NumberInput step="0.5" min="1" max="5000" value={arteAncho} onChange={setArteAncho} className={inp} />
                         </Field>
                       </div>
 
@@ -614,7 +614,7 @@ export default function App() {
                             {['Inicio–A', 'A–B', 'B–C', 'C–D', 'D–E', 'E–F', 'F–Final'].map((label, i) => (
                               <label key={label}>
                                 <span>{label}</span>
-                                <NumberInput step="0.5" min="0" value={arteTramos[i]}
+                                <NumberInput step="0.5" min="0" max="5000" value={arteTramos[i]}
                                   onChange={(valor) => setArteTramos((actual) => actual.map((v, j) => (j === i ? valor : v)))} />
                                 <small>calc. {tramosCalculados[i].toFixed(1)}</small>
                               </label>
@@ -624,7 +624,7 @@ export default function App() {
                       )}
 
                       <Field label="Desplazamiento horizontal (mm)">
-                        <NumberInput step="1" value={arteOffset} onChange={setArteOffset} className={inp} />
+                        <NumberInput step="1" min="-5000" max="5000" value={arteOffset} onChange={setArteOffset} className={inp} />
                       </Field>
 
                       <Toggle
@@ -823,7 +823,7 @@ export default function App() {
                           <circle key={`${ci}-${xi}-${yi}`}
                             cx={packXStart + xi * dia + dia / 2}
                             cy={ci * canal + oreja + yi * dia + dia / 2}
-                            r={dia / 2 - 1.5}
+                            r={Math.max(0.5, dia / 2 - 1.5)}
                             fill="white" stroke="#475569" strokeWidth="1.5" />
                         ))
                       )}
