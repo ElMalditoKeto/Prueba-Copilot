@@ -3,6 +3,7 @@ import Pack3D from './Pack3D';
 import BobinaOptima from './BobinaOptima';
 import ArtePreview from './ArtePreview';
 import ZoomableSvg from './ZoomableSvg';
+import NumberInput from './NumberInput';
 import { facePolygon, simularOreja, evaluarEstructura, analizarBobina } from './shrinkModel';
 
 // ─── SMALL COMPONENTS ──────────────────────────────────────────────────────────
@@ -224,7 +225,7 @@ export default function App() {
 
   const warnings = validate({ altCil, alt, tapa, dia, ladoA, ladoB, micron, entraEnCanal, anchoPaquete, canal, solape: diferenciaCorte, estructura, ratioHueco: simActual.ratioHueco });
 
-  // El 3D sigue a los datos en vivo (con una pequeña espera para no regenerar en cada tecla).
+  // El 3D se genera con el botón; se avisa cuando los datos cambiaron desde la última vez.
   const geometryValida = ladoA >= 1 && ladoB >= 1 && dia > 0 && alt > 0 && altCil >= 0 && altCil <= alt && tapa > 0 && tapa < dia;
   const geometriaActual = useMemo(() => {
     if (!geometryValida) return null;
@@ -257,11 +258,10 @@ export default function App() {
     // pts no va en las dependencias: se recalcula de los mismos datos (disposición y corte).
   }, [geometryValida, ladoA, ladoB, dia, alt, altCil, tapa, canales, orientacion, tipoFilm, corte, folienbreite, oreja, simActual, arteImagen, arteNombre, arteLargoEfectivo, arteAncho, arteOffset, arteInvertido, arteRecorte, arteEncuadre, arteMapeo, arteTramos]);
 
-  useEffect(() => {
-    if (!geometriaActual) return undefined;
-    const timer = setTimeout(() => setGeometry3D(geometriaActual), 180);
-    return () => clearTimeout(timer);
-  }, [geometriaActual]);
+  const cambios3DPendientes = Boolean(geometriaActual && geometry3D && geometriaActual !== geometry3D);
+  const actualizar3D = () => {
+    if (geometriaActual) setGeometry3D(geometriaActual);
+  };
 
   // ── CONFIG PERSISTENCE ──
   const applyConfig = (p) => {
@@ -476,30 +476,30 @@ export default function App() {
                   </Field>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Botellas del lado A">
-                      <input type="number" value={ladoA} onChange={e => setLadoA(+e.target.value)} className={inp} />
+                      <NumberInput value={ladoA} onChange={setLadoA} className={inp} />
                     </Field>
                     <Field label="Botellas del lado B">
-                      <input type="number" value={ladoB} onChange={e => setLadoB(+e.target.value)} className={inp} />
+                      <NumberInput value={ladoB} onChange={setLadoB} className={inp} />
                     </Field>
                   </div>
                   <Field label="Diámetro de botella (mm)">
-                    <input type="number" step="0.1" value={dia} onChange={e => setDia(+e.target.value)} className={inp} />
+                    <NumberInput step="0.1" value={dia} onChange={setDia} className={inp} />
                     <div className="text-[7px] font-mono text-gray-400 mt-0.5 leading-tight">
                       diámetro mayor = distancia entre centros
                     </div>
                   </Field>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Altura total (mm)">
-                      <input type="number" step="0.1" value={alt} onChange={e => setAlt(+e.target.value)} className={inp} />
+                      <NumberInput step="0.1" value={alt} onChange={setAlt} className={inp} />
                     </Field>
                     <Field label="Altura del cuerpo recto (mm)">
-                      <input type="number" step="0.1" value={altCil}
-                        onChange={e => setAltCil(+e.target.value)}
+                      <NumberInput step="0.1" value={altCil}
+                        onChange={setAltCil}
                         className={altCil > alt ? `${inp} border-red-500 bg-red-50` : inp} />
                     </Field>
                   </div>
                   <Field label="Diámetro de tapa (mm)">
-                    <input type="number" step="0.1" value={tapa} onChange={e => setTapa(+e.target.value)} className={inpRed} />
+                    <NumberInput step="0.1" value={tapa} onChange={setTapa} className={inpRed} />
                   </Field>
                 </div>
               </div>
@@ -519,7 +519,7 @@ export default function App() {
                   </Field>
                   {modoBobina === 'manual' ? (
                     <Field label="Ancho total de bobina (mm)">
-                      <input type="number" step="0.5" value={bobinaManual} onChange={e => setBobinaManual(+e.target.value)} className={inpAmber} />
+                      <NumberInput step="0.5" value={bobinaManual} onChange={setBobinaManual} className={inpAmber} />
                     </Field>
                   ) : (
                     <div className="calculated-hint">
@@ -540,20 +540,20 @@ export default function App() {
                   {modoCorte === 'manual' ? (
                     <>
                       <Field label="Largo de corte manual (mm)">
-                        <input type="number" step="0.5" value={rapport} onChange={e => setRapport(+e.target.value)} className={inpAmber} />
+                        <NumberInput step="0.5" value={rapport} onChange={setRapport} className={inpAmber} />
                       </Field>
                       <div className="calculated-hint">Solape resultante: <strong>{diferenciaCorte.toFixed(1)} mm</strong><span>Perfil geométrico: {perfilGeometrico.toFixed(1)} mm</span></div>
                     </>
                   ) : (
                     <>
                       <Field label="Solape S/SS (mm)">
-                        <input type="number" step="1" min="0" value={solapeDeseado} onChange={e => setSolapeDeseado(+e.target.value)} className={inpAmber} />
+                        <NumberInput step="1" min="0" value={solapeDeseado} onChange={setSolapeDeseado} className={inpAmber} />
                       </Field>
                       <div className="calculated-hint">Calculado: <strong>{largoCorteCalculado.toFixed(1)} mm</strong><span>Perfil {perfilGeometrico.toFixed(1)} mm + solape {solapeDeseado.toFixed(1)} mm</span></div>
                     </>
                   )}
                   <Field label="Horno">
-                    <select value={canales} onChange={e => setCanales(+e.target.value)} className={inp}>
+                    <select value={canales} onChange={setCanales} className={inp}>
                       <option value={1}>Monocanal</option>
                       <option value={2}>Doble Canal</option>
                     </select>
@@ -571,7 +571,7 @@ export default function App() {
                     options={[{ val:'cristal', label:'CRISTAL' }, { val:'arte', label:'CON ARTE' }]}
                   />
                   <Field label="Espesor Film (µm)">
-                    <input type="number" value={micron} onChange={e => setMicron(+e.target.value)} className={inp} />
+                    <NumberInput value={micron} onChange={setMicron} className={inp} />
                   </Field>
                   {tipoFilm === 'arte' && (
                     <div className="art-config-card">
@@ -591,10 +591,10 @@ export default function App() {
                         <Field label="Largo del arte (mm)">
                           {usarPlano
                             ? <input type="number" value={arteLargoEfectivo.toFixed(1)} readOnly className={`${inp} bg-gray-100`} title="Suma de los tramos del plano" />
-                            : <input type="number" step="0.5" value={arteLargo} onChange={e => setArteLargo(+e.target.value)} className={inp} />}
+                            : <NumberInput step="0.5" value={arteLargo} onChange={setArteLargo} className={inp} />}
                         </Field>
                         <Field label="Ancho del arte (mm)">
-                          <input type="number" step="0.5" value={arteAncho} onChange={e => setArteAncho(+e.target.value)} className={inp} />
+                          <NumberInput step="0.5" value={arteAncho} onChange={setArteAncho} className={inp} />
                         </Field>
                       </div>
 
@@ -614,8 +614,8 @@ export default function App() {
                             {['Inicio–A', 'A–B', 'B–C', 'C–D', 'D–E', 'E–F', 'F–Final'].map((label, i) => (
                               <label key={label}>
                                 <span>{label}</span>
-                                <input type="number" step="0.5" min="0" value={arteTramos[i]}
-                                  onChange={(event) => setArteTramos((actual) => actual.map((v, j) => (j === i ? +event.target.value : v)))} />
+                                <NumberInput step="0.5" min="0" value={arteTramos[i]}
+                                  onChange={(valor) => setArteTramos((actual) => actual.map((v, j) => (j === i ? valor : v)))} />
                                 <small>calc. {tramosCalculados[i].toFixed(1)}</small>
                               </label>
                             ))}
@@ -624,7 +624,7 @@ export default function App() {
                       )}
 
                       <Field label="Desplazamiento horizontal (mm)">
-                        <input type="number" step="1" value={arteOffset} onChange={e => setArteOffset(+e.target.value)} className={inp} />
+                        <NumberInput step="1" value={arteOffset} onChange={setArteOffset} className={inp} />
                       </Field>
 
                       <Toggle
@@ -640,8 +640,8 @@ export default function App() {
                             <label key={key}>
                               <span>{label}</span>
                               <div>
-                                <input type="number" min="0" max="45" step="0.1" value={arteEncuadre[key]}
-                                  onChange={(event) => setArteEncuadre((current) => ({ ...current, [key]: +event.target.value }))} />
+                                <NumberInput min="0" max="45" step="0.1" value={arteEncuadre[key]}
+                                  onChange={(valor) => setArteEncuadre((current) => ({ ...current, [key]: valor }))} />
                                 <b>%</b>
                               </div>
                             </label>
@@ -662,13 +662,12 @@ export default function App() {
                             <label key={key}>
                               <span>{label}</span>
                               <div>
-                                <input
-                                  type="number"
+                                <NumberInput
                                   min="0"
                                   max="45"
                                   step="0.5"
                                   value={arteRecorte[key]}
-                                  onChange={(event) => setArteRecorte((current) => ({ ...current, [key]: +event.target.value }))}
+                                  onChange={(valor) => setArteRecorte((current) => ({ ...current, [key]: valor }))}
                                 />
                                 <b>%</b>
                               </div>
@@ -696,18 +695,18 @@ export default function App() {
                 <div className="p-3 space-y-2.5">
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Contracción long. (%)">
-                      <input type="number" step="1" min="0" max="95" value={contraccionMD} onChange={e => setContraccionMD(+e.target.value)} className={inp} />
+                      <NumberInput step="1" min="0" max="95" value={contraccionMD} onChange={setContraccionMD} className={inp} />
                     </Field>
                     <Field label="Contracción transv. (%)">
-                      <input type="number" step="1" min="0" max="95" value={contraccionTD} onChange={e => setContraccionTD(+e.target.value)} className={inp} />
+                      <NumberInput step="1" min="0" max="95" value={contraccionTD} onChange={setContraccionTD} className={inp} />
                     </Field>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Hueco objetivo (% cara)">
-                      <input type="number" step="1" min="0" max="100" value={huecoObjetivo} onChange={e => setHuecoObjetivo(+e.target.value)} className={inp} />
+                      <NumberInput step="1" min="0" max="100" value={huecoObjetivo} onChange={setHuecoObjetivo} className={inp} />
                     </Field>
                     <Field label="Hueco máximo (% cara)">
-                      <input type="number" step="1" min="0" max="100" value={huecoMaximo} onChange={e => setHuecoMaximo(+e.target.value)} className={inp} />
+                      <NumberInput step="1" min="0" max="100" value={huecoMaximo} onChange={setHuecoMaximo} className={inp} />
                     </Field>
                   </div>
                   <div className="orientation-help">
@@ -1052,7 +1051,13 @@ export default function App() {
                   <div>
                     <span className="viewer-3d-kicker">Visualizador interactivo</span>
                     <h3>Pack 3D: antes y después del horno</h3>
-                    <p>Se actualiza solo con cada cambio. Arrastrá para rotar. Mové la barra de contracción para ver cómo el film se pega al pack y las orejas se cierran sobre el lado A.</p>
+                    <p>Arrastrá para rotar. Mové la barra de contracción para ver cómo el film se pega al pack y las orejas se cierran sobre el lado A.</p>
+                  </div>
+                  <div className="viewer-3d-actions">
+                    <button type="button" className={cambios3DPendientes || !geometry3D ? 'viewer-button-primary' : 'viewer-button-secondary'}
+                      onClick={actualizar3D} disabled={!geometriaActual}>
+                      {geometry3D ? 'Actualizar 3D' : 'Generar modelo 3D'}
+                    </button>
                   </div>
                 </div>
 
@@ -1082,7 +1087,7 @@ export default function App() {
                   </div>
                   <label className="viewer-shrink-slider">
                     <span>Contracción aplicada: <strong>{contraccion3D}%</strong></span>
-                    <input type="range" min="0" max="100" step="1" value={contraccion3D} onChange={(event) => setContraccion3D(+event.target.value)} />
+                    <input type="range" min="0" max="100" step="1" value={contraccion3D} onChange={(valor) => setContraccion3D(valor)} />
                   </label>
                   <div className="viewer-shrink-stats">
                     <span>Borde oreja <strong>{(simActual.contraccionBorde * 100).toFixed(1)}%</strong></span>
@@ -1119,14 +1124,17 @@ export default function App() {
                 {!geometryValida && geometry3D && (
                   <div className="viewer-dirty-notice">Hay datos inválidos. El modelo conserva la última geometría válida.</div>
                 )}
+                {geometryValida && cambios3DPendientes && (
+                  <div className="viewer-dirty-notice">Hay cambios sin aplicar al 3D. Presioná “Actualizar 3D” para verlos.</div>
+                )}
 
                 {geometry3D ? (
                   <Pack3D geometry={geometry3D} resetToken={reset3DToken} vista={vista3D} contraccion={contraccion3D / 100} capas={capas3D} />
                 ) : (
                   <div className="viewer-3d-empty">
                     <div className="viewer-3d-icon">3D</div>
-                    <strong>Generando modelo…</strong>
-                    <span>El 3D se actualiza solo con los datos del pack.</span>
+                    <strong>Modelo todavía no generado</strong>
+                    <span>Presioná “Generar modelo 3D” para crear el pack con los datos actuales.</span>
                   </div>
                 )}
               </section>

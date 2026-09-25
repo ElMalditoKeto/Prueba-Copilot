@@ -470,6 +470,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
         const previous = filmMesh.material;
         filmMesh.material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
         previous.dispose();
+        requestRender();
       });
     }
 
@@ -544,32 +545,44 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
 
     controlsRef.current = {
       setView,
-      setContraccion: (t) => film.update(Math.min(Math.max(t, 0), 1)),
+      setContraccion: (t) => {
+        film.update(Math.min(Math.max(t, 0), 1));
+        requestRender();
+      },
       setCapas: ({ mapeo = true, solape: verSolape = true, orejas = true } = {}) => {
         capaMapeo.visible = mapeo;
         capaSolape.visible = verSolape;
         capaOrejas.visible = orejas;
+        requestRender();
       },
     };
 
-    let frame;
-    const render = () => {
-      controls.update();
+    // Se dibuja solo cuando algo cambia (cámara, contracción, capas), no en cada cuadro.
+    let frame = null;
+    function requestRender() {
+      if (frame === null) frame = requestAnimationFrame(renderFrame);
+    }
+    function renderFrame() {
+      frame = null;
+      const moviendo = controls.update();
       renderer.render(scene, camera);
-      frame = requestAnimationFrame(render);
-    };
-    render();
+      if (moviendo) requestRender();
+    }
+    controls.addEventListener('change', requestRender);
+    requestRender();
     const resizeObserver = new ResizeObserver(() => {
       const nextWidth = Math.max(mount.clientWidth, 320);
       const nextHeight = Math.max(mount.clientHeight, 420);
       camera.aspect = nextWidth / nextHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(nextWidth, nextHeight);
+      requestRender();
     });
     resizeObserver.observe(mount);
 
     return () => {
-      cancelAnimationFrame(frame);
+      if (frame !== null) cancelAnimationFrame(frame);
+      controls.removeEventListener('change', requestRender);
       resizeObserver.disconnect();
       camaraRef.current = { position: camera.position.clone(), target: controls.target.clone() };
       controls.dispose();
