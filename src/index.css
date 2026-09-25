@@ -374,3 +374,10 @@ body {
 .zoom-svg-pan { cursor: grab; }
 .zoom-svg-pan:active { cursor: grabbing; }
 .zoom-svg-hint { padding: 4px 10px; border-top: 1px solid #eef0f3; color: #94a3b8; font-size: 9px; }
+
+/* Aviso de contexto 3D perdido */
+.pack-3d-canvas-wrap { position: relative; }
+.pack-3d-lost { position: absolute; inset: 0; display: grid; place-items: center; gap: 8px; padding: 24px; background: rgba(14, 23, 41, 0.88); color: #fff; text-align: center; }
+.pack-3d-lost strong { font-size: 14px; }
+.pack-3d-lost span { max-width: 340px; color: #c7d1e0; font-size: 11px; }
+.pack-3d-lost button { margin-top: 6px; padding: 9px 18px; border: 0; border-radius: 999px; background: #ef1f25; color: #fff; font-size: 11px; font-weight: 800; }

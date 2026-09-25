@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -327,6 +327,11 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
   // Un solo renderer (contexto WebGL) mientras el visor está montado. Crear uno nuevo en cada
   // regeneración agotaba el límite de contextos del navegador y la vista quedaba en negro.
   const rendererRef = useRef(null);
+  const requestRenderRef = useRef(null); // el "pedido de cuadro" de la escena activa
+  // El navegador puede quitarle el contexto WebGL a la pestaña (pestaña en segundo plano,
+  // poca memoria de video, etc.). Sin este aviso el visor queda en negro para siempre.
+  const [contextoPerdido, setContextoPerdido] = useState(false);
+  const [reintentoToken, setReintentoToken] = useState(0);
 
   useEffect(() => () => {
     const renderer = rendererRef.current;
@@ -337,6 +342,19 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     }
     mountRef.current?.replaceChildren();
   }, []);
+
+  // Reintentar: fuerza un renderer nuevo si el navegador no restauró el contexto solo.
+  const reintentar = () => {
+    const renderer = rendererRef.current;
+    if (renderer) {
+      renderer.dispose();
+      renderer.forceContextLoss();
+      rendererRef.current = null;
+    }
+    mountRef.current?.replaceChildren();
+    setContextoPerdido(false);
+    setReintentoToken((n) => n + 1);
+  };
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -351,9 +369,15 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     if (!renderer) {
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.domElement.addEventListener('webglcontextlost', (event) => event.preventDefault());
+      renderer.domElement.addEventListener('webglcontextlost', (event) => {
+        event.preventDefault(); // permite que el navegador lo restaure solo
+        setContextoPerdido(true);
+      });
+      renderer.domElement.addEventListener('webglcontextrestored', () => {
+        setContextoPerdido(false);
+        requestRenderRef.current?.();
+      });
       rendererRef.current = renderer;
     }
     renderer.setSize(width, height);
@@ -389,7 +413,6 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     scene.add(new THREE.HemisphereLight(0xffffff, 0x718296, 2.4));
     const mainLight = new THREE.DirectionalLight(0xffffff, 3.2);
     mainLight.position.set(5, 9, 6);
-    mainLight.castShadow = true;
     scene.add(mainLight);
 
     const floor = new THREE.Mesh(
@@ -398,7 +421,6 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.02;
-    floor.receiveShadow = true;
     scene.add(floor);
     const grid = new THREE.GridHelper(16, 16, 0x98a9ba, 0xcbd6e2);
     grid.position.y = -0.015;
@@ -432,7 +454,6 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
         bottle.add(liquidMesh);
         const body = new THREE.Mesh(new THREE.CylinderGeometry(bodyRadius * 0.985, bodyRadius * 0.985, shoulderStart, 32), glass);
         body.position.y = shoulderStart / 2;
-        body.castShadow = true;
         bottle.add(body);
         const label = new THREE.Mesh(new THREE.CylinderGeometry(bodyRadius * 0.995, bodyRadius * 0.995, shoulderStart * 0.27, 32, 1, true), labelMaterial);
         label.position.y = shoulderStart * 0.58;
@@ -592,6 +613,7 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
       if (moviendo) requestRender();
     }
     controls.addEventListener('change', requestRender);
+    requestRenderRef.current = requestRender;
     requestRender();
     const resizeObserver = new ResizeObserver(() => {
       const nextWidth = Math.max(mount.clientWidth, 320);
@@ -613,8 +635,9 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
       disposeScene(scene);
       renderer.renderLists.dispose();
       controlsRef.current = null;
+      if (requestRenderRef.current === requestRender) requestRenderRef.current = null;
     };
-  }, [geometry]);
+  }, [geometry, reintentoToken]);
 
   useEffect(() => {
     controlsRef.current?.setContraccion(contraccion);
@@ -628,5 +651,16 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     if (resetToken > 0) controlsRef.current?.setView(vista);
   }, [resetToken, vista]);
 
-  return <div ref={mountRef} className="pack-3d-canvas" aria-label="Visualizador 3D del pack con film, orejas y solape" />;
+  return (
+    <div className="pack-3d-canvas-wrap">
+      <div ref={mountRef} className="pack-3d-canvas" aria-label="Visualizador 3D del pack con film, orejas y solape" />
+      {contextoPerdido && (
+        <div className="pack-3d-lost">
+          <strong>El visor 3D perdió la conexión con la placa de video</strong>
+          <span>Suele recuperarse solo en un momento. Si no, probá recargarlo.</span>
+          <button type="button" onClick={reintentar}>Recargar visor</button>
+        </div>
+      )}
+    </div>
+  );
 }
