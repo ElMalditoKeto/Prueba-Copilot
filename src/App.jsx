@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Pack3D from './Pack3D';
 import BobinaOptima from './BobinaOptima';
 import ArtePreview from './ArtePreview';
+import ZoomableSvg from './ZoomableSvg';
 import { facePolygon, simularOreja, evaluarEstructura, analizarBobina } from './shrinkModel';
 
 // ─── SMALL COMPONENTS ──────────────────────────────────────────────────────────
@@ -790,12 +791,7 @@ export default function App() {
                     {corte.toFixed(0)} × {bobTotal.toFixed(0)} mm
                   </span>
                 </div>
-                <svg
-                  width="100%"
-                  style={{ maxHeight: '340px', display: 'block' }}
-                  viewBox={`${-ML} ${-MT} ${corte + ML + MR} ${bobTotal + MT + MB}`}
-                  preserveAspectRatio="xMidYMid meet"
-                >
+                <ZoomableSvg viewBox={{ x: -ML, y: -MT, w: corte + ML + MR, h: bobTotal + MT + MB }} maxHeight={340}>
                   <defs>
                     {[['mD','#1e293b'],['mB','#2563eb'],['mG','#059669'],['mR','#E61C24']].map(([id, fill]) => (
                       <marker key={id} id={id} viewBox="0 0 10 10" refX="9" refY="5"
@@ -903,7 +899,7 @@ export default function App() {
                     fontFamily="monospace" fontWeight="bold" textAnchor="middle">
                     S = {corte.toFixed(1)} mm
                   </text>
-                </svg>
+                </ZoomableSvg>
               </div>
 
               {/* ── BOTTOM ROW ── */}

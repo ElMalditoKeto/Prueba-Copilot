@@ -540,15 +540,6 @@ export default function Pack3D({ geometry, resetToken = 0, contraccion = 1, capa
     if (hueco.length) {
       capaOrejas.add(overlayLine(hueco.map((p) => toWorld(p, zCota)), COLOR_OREJA, { dashed: true, loop: true }));
     }
-    if (oreja > 0) {
-      const xLado = (-ancho / 2) * scale - 0.06;
-      dimension(capaOrejas,
-        new THREE.Vector3(xLado, 0.01, (profundidad / 2) * scale),
-        new THREE.Vector3(xLado, 0.01, (profundidad / 2 + oreja) * scale),
-        COLOR_OREJA,
-        `Oreja ${oreja.toFixed(1)} mm`,
-        new THREE.Vector3(-0.85, 0.2, 0));
-    }
     pack.add(capaOrejas);
 
     controlsRef.current = {

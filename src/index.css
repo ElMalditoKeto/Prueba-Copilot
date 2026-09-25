@@ -362,3 +362,15 @@ body {
 .legend-knot { border-top: 2px solid #e61c24; }
 .legend-printed { border-top: 2px dashed #0e1729; }
 .arte-preview-img { position: absolute; inset: 0; overflow: hidden; }
+
+/* Vista superior con zoom */
+.zoom-svg { position: relative; }
+.zoom-svg-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid #d7dde6; border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 4px 12px rgba(15,23,42,.08); }
+.zoom-svg-toolbar button { min-width: 28px; height: 26px; padding: 0 8px; border: 1px solid #d7dde6; border-radius: 7px; background: #fff; color: #334155; font-size: 11px; font-weight: 800; }
+.zoom-svg-toolbar button:hover:not(:disabled) { background: #f1f5f9; }
+.zoom-svg-toolbar button:disabled { opacity: .4; cursor: not-allowed; }
+.zoom-svg-toolbar span { min-width: 40px; color: #64748b; font-size: 10px; font-weight: 800; text-align: center; }
+.zoom-svg svg { touch-action: none; }
+.zoom-svg-pan { cursor: grab; }
+.zoom-svg-pan:active { cursor: grabbing; }
+.zoom-svg-hint { padding: 4px 10px; border-top: 1px solid #eef0f3; color: #94a3b8; font-size: 9px; }
